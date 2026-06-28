@@ -764,9 +764,7 @@ function rebuildFrom(rounds, seedHist, seed, created, mode){
   if(np.Hold.length<=800) for(let i=12;i<np.Hold.length;i++){           // warm weights on the seed history (no counters)
     const dists=sigAll(np.Hold.slice(0,i)); updateWeights(np.Wold,dists,np.Hold[i],K_OLD); }
   for(const e of rounds){
-    if(e.seed){ // prior/warm-up history: trains the OLD engine, never scored as a live round
-      const sp=predict(np.Hold,np.Wold,K_OLD); updateWeights(np.Wold,sp.dists,e.s,K_OLD);
-      np.Hold.push(e.s); np.rounds.push(e); continue; }
+    if(e.seed) continue;   // warm-up/seed rounds retired: dropped on every rebuild so they can never re-enter via sync
     const sumPred=predict(np.Hold,np.Wold,K_OLD);
     const reelPred = np.mode==='reels' ? predictReels(np.reels,np.Wr,K_OLD) : null;
     const useReel = reelPred && np.reels.length>=12;
