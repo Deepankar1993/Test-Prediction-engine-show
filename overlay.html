@@ -94,13 +94,22 @@ let P=null, cur=null;
 function fresh(){ return {v:2,created:Date.now(),mode:'sum',Hold:[],Hnew:[],reels:[],
   Wold:newWeights(),Wnew:newWeights(),Wr:[newWeights(),newWeights(),newWeights()],
   oH:0,oR:0,bH:0,nH:0,nR:0,streak:0,best:0,days:{},lastTs:null,rounds:[],lastExport:0,
-  t1N:0,t1Hit:0,t1SumP:0,cHiN:0,cHiHit:0,           // trust meter: top-pick calibration + high-confidence hit rate
+  t1N:0,t1Hit:0,t1SumP:0,cHiN:0,cHiHit:0,shN:0,shH:0,   // trust meter + shadow (full-engine hits, drives do-no-harm)
   seed:'player-'+Math.floor(Math.random()*1e9).toString(36)}; }
 // record one round's top-pick confidence + whether it landed (prequential: pred was made before the result)
 function trackTrust(o,pool,actual){ if(o.Hold.length<12||!pool) return;
   const t1=topK(pool,1)[0], t1p=pool[t1];
   o.t1N=(o.t1N||0)+1; o.t1SumP=(o.t1SumP||0)+t1p; if(t1===actual)o.t1Hit=(o.t1Hit||0)+1;
   if(t1p>=CONF_THR){ o.cHiN=(o.cHiN||0)+1; if(t1===actual)o.cHiHit=(o.cHiHit||0)+1; } }
+// "DO NO HARM": bet the central baseline until the engine's SHADOW (its full prediction, tracked
+// but not bet) proves a validated edge over baseline; then trust it proportionally. Guarantees we
+// never sit below the ~54% central-7 baseline on structureless data, yet auto-upgrades on real edge.
+function trustK(s){ const sN=s.shN||0; if(sN<50) return 0;                  // need evidence first
+  const sRate=(s.shH||0)/sN, bRate=s.oR?(s.bH/s.oR):0;
+  return Math.max(0, Math.min(1, ((sRate-bRate)-0.005)/0.045)); }           // ramp 0..1 as edge goes ~0.5%->5%
+function blendBet(full,s){ const k=trustK(s);
+  const pool=(full.pool&&typeof PRIOR!=='undefined')?full.pool.map((v,i)=>(1-k)*PRIOR[i]+k*(isFinite(v)?v:PRIOR[i])):full.pool;
+  return {list:topK(pool,K_OLD), pool, fullPool:full.pool, dists:full.dists, fullList:full.list, k}; }
 function load(){ try{const s=JSON.parse(localStorage.getItem(LS));
   if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0;
     if(!s.Wold)s.Wold=newWeights(); if(!s.Wnew)s.Wnew=newWeights(); return s; } }catch(e){} return fresh(); }
@@ -113,12 +122,14 @@ function chipsP(arr,pool,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n
   const p=(pool&&isFinite(pool[n]))?Math.round(pool[n]*100):0;
   return `<span class="chip">${n}<small>${p}%</small></span>`; }).join(''); }
 function lockRound(){
-  cur={ old:predict(P.Hold,P.Wold,K_OLD), nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
+  const full=predict(P.Hold,P.Wold,K_OLD);
+  cur={ old:blendBet(full,P), nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
   render();
 }
 function resolve(actual){
   const oldHit=cur.old.list.indexOf(actual)>=0; P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
-  trackTrust(P, cur.old.pool, actual);
+  if(P.Hold.length>=12){ P.shN=(P.shN||0)+1; if(cur.old.fullList.indexOf(actual)>=0)P.shH=(P.shH||0)+1; }  // shadow: would the full engine have hit?
+  trackTrust(P, cur.old.fullPool, actual);
   updateWeights(P.Wold,cur.old.dists,actual,K_OLD); P.Hold.push(actual);
   const res=cur.fair.result, ok=fairVerify(cur.fair), newHit=cur.nw.list.indexOf(res)>=0;
   P.nR++; if(newHit)P.nH++; updateWeights(P.Wnew,cur.nw.dists,res,K_NEW); P.Hnew.push(res);
@@ -135,10 +146,11 @@ function rebuildFrom(rounds, seed, created){
   const np=fresh(); np.seed=seed; np.created=created;
   for(const e of rounds){
     if(e.seed) continue;   // warm-up/seed rounds retired: dropped on every rebuild so they can never re-enter via sync
-    const c={ old:predict(np.Hold,np.Wold,K_OLD), nw:predict(np.Hnew,np.Wnew,K_NEW) };
+    const full=predict(np.Hold,np.Wold,K_OLD); const c={ old:blendBet(full,np), nw:predict(np.Hnew,np.Wnew,K_NEW) };
     const oh=c.old.list.indexOf(e.s)>=0; np.oR++; if(oh)np.oH++; if(BASE8set.has(e.s))np.bH++;
-    trackTrust(np, c.old.pool, e.s);
-    updateWeights(np.Wold,c.old.dists,e.s,K_OLD); np.Hold.push(e.s);
+    if(np.Hold.length>=12){ np.shN=(np.shN||0)+1; if(full.list.indexOf(e.s)>=0)np.shH=(np.shH||0)+1; }
+    trackTrust(np, full.pool, e.s);
+    updateWeights(np.Wold,full.dists,e.s,K_OLD); np.Hold.push(e.s);
     const nh=c.nw.list.indexOf(e.nr)>=0; np.nR++; if(nh)np.nH++;
     updateWeights(np.Wnew,c.nw.dists,e.nr,K_NEW); np.Hnew.push(e.nr);
     np.streak=oh?np.streak+1:0; if(np.streak>np.best)np.best=np.streak;
@@ -169,7 +181,9 @@ function renderTrust(){
   if(hiN<8){ t.innerHTML=`<span class="tlab">trust</span> building… <small>${hiN}/8 confident calls</small>`; t.style.color='var(--faint)'; return; }
   const y=Math.round(hiH/hiN*100), claim=P.t1N?Math.round(P.t1SumP/P.t1N*100):0;
   t.innerHTML=`<span class="tlab">trust</span> ≥15% sure → lands <b>${y}%</b> <small>(${hiH}/${hiN} · top pick claims ~${claim}%)</small>`;
-  t.style.color = y>=15 ? '#7fe3c0' : (y>=8 ? '#ffd27f' : '#ff9d8b');   // earned / weak / false confidence
+  const k=trustK(P);   // override the line above with the do-no-harm bet mode (this runs last, so it wins)
+  if(k<=0){ t.innerHTML=`<span class="tlab">safe</span> betting central-7 baseline <small>(engine not beating it yet; lands ${Math.round(hiH/hiN*100)}% when sure)</small>`; t.style.color='var(--mut)'; }
+  else { t.innerHTML=`<span class="tlab">edge ${Math.round(k*100)}%</span> blending in the engine <small>(${hiH}/${hiN} confident hits)</small>`; t.style.color='#7fe3c0'; }
 }
 function render(){
   chipsP(cur.old.list,cur.old.pool,'old'); chips(cur.nw.list,'new');
@@ -262,7 +276,7 @@ const _render=render; render=function(){ _render(); requestAnimationFrame(report
 
 try{ P=load();
   // self-clean + backfill: drop seed rounds, and (re)compute the trust meter from history if it's missing
-  if(P.rounds&&(P.rounds.some(r=>r&&r.seed)||P.t1N==null)){ P=rebuildFrom(P.rounds.filter(r=>!(r&&r.seed)),P.seed,P.created); save(); }
+  if(P.rounds&&(P.rounds.some(r=>r&&r.seed)||P.t1N==null||P.shN==null)){ P=rebuildFrom(P.rounds.filter(r=>!(r&&r.seed)),P.seed,P.created); save(); }
   // a test shared TO the Android app (via the share sheet) arrives here on open
   try{ if(window.SyloxNative&&SyloxNative.pendingImport){ const pend=SyloxNative.pendingImport(); if(pend) window.__sxImport(pend); } }catch(e){}
   buildPad(); lockRound(); reportHeight(); }
