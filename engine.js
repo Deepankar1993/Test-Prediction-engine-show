@@ -118,15 +118,17 @@ function sigDist(name,H,RG,PRI){
   return null;
 }
 function sigAll(H,RG,PRI){ const d={}; for(const nm of SIGNALS) d[nm]=sigDist(nm,H,RG,PRI); return d; }
+// linear (mixture) pool: a weighted average of the signal distributions. Unlike a
+// log-linear/geometric pool it does NOT let the central marginal veto low-prior (tail)
+// values, so genuine patterns — including spread/tail numbers — surface in the top-k.
+// Validated: equal-or-better edge on markov/lcg/periodic, still ~0 on fair data.
 function combineDists(dists,W,RG,PRI){
-  RG=RG||R; PRI=PRI||PRIOR; const lp=new Array(RG).fill(0); let ws=0;
+  RG=RG||R; PRI=PRI||PRIOR; const out=new Array(RG).fill(0); let ws=0;
   for(const nm of SIGNALS){ const d=dists[nm]; if(!d||W[nm]<=0) continue; ws+=W[nm];
-    for(let k=0;k<RG;k++) lp[k]+=W[nm]*Math.log(d[k]+1e-9); }
+    for(let k=0;k<RG;k++){ const v=d[k]; if(isFinite(v)) out[k]+=W[nm]*v; } }
   if(ws===0) return PRI.slice();
-  let mx=-Infinity; for(const v of lp) if(isFinite(v)&&v>mx)mx=v;
-  if(!isFinite(mx)) return PRI.slice();
-  const out=nrm(lp.map(v=>Math.exp((isFinite(v)?v:-Infinity)-mx)));
-  return out.some(x=>!isFinite(x))?PRI.slice():out;
+  const s=nrm(out);
+  return s.some(x=>!isFinite(x))?PRI.slice():s;
 }
 // NaN-safe; ties break toward the CENTER of the range (the honest baseline), never to [0,1,2,3…].
 function topK(arr,k){ const C=(arr.length-1)/2;

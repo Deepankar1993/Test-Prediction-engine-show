@@ -56,7 +56,13 @@
     <div class="status" id="status">Tap the result that came up on the game.</div>
     <div class="recent" id="recent"></div>
     <div class="pad" id="pad"></div>
-    <div class="miniBtns"><div class="mini" id="undo">undo last</div><div class="mini" id="open">full tool ↗</div></div>
+    <div class="miniBtns">
+      <div class="mini" id="undo">undo</div>
+      <div class="mini" id="exp">export</div>
+      <div class="mini" id="imp">import</div>
+      <div class="mini" id="open">full ↗</div>
+    </div>
+    <input type="file" id="impFile" accept="application/json" hidden>
   </div>
 </div>
 <script src="engine.js"></script>
@@ -133,6 +139,28 @@ $('undo').onclick=undo;
 $('open').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.openFull) SyloxNative.openFull();
   else window.open('fairness_demo.html','_blank'); }catch(e){ location.href='fairness_demo.html'; } };
 
+// export / import — share the saved test with the browser tool (and across devices)
+function exportData(){
+  const json=JSON.stringify(P);
+  try{ if(window.SyloxNative&&SyloxNative.share){ SyloxNative.share(json); P.lastExport=P.oR; save(); return; } }catch(e){}
+  const blob=new Blob([json],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='sylox-livetest-'+new Date().toISOString().slice(0,10)+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  P.lastExport=P.oR; save();
+}
+window.__sxImport=function(jsonStr){
+  try{ const s=JSON.parse(jsonStr);
+    if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0;
+      if(!s.Wold)s.Wold=newWeights(); if(!s.Wnew)s.Wnew=newWeights();
+      P=s; save(); lockRound(); return true; } }catch(e){}
+  return false;
+};
+$('exp').onclick=exportData;
+$('imp').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.importFile){ SyloxNative.importFile(); return; } }catch(e){} $('impFile').click(); };
+$('impFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=()=>window.__sxImport(r.result); r.readAsText(f); };
+
 // when embedded in the Android overlay shell (?app=1) the native bar provides drag+close
 const EMBED=new URLSearchParams(location.search).has('app');
 if(EMBED){ $('bar').style.display='none'; document.body.style.padding='0'; document.documentElement.style.background='transparent'; }
@@ -141,7 +169,10 @@ function reportHeight(){ try{ if(window.SyloxNative&&SyloxNative.resize){
   SyloxNative.resize(Math.ceil(document.getElementById('ov').getBoundingClientRect().height)); } }catch(e){} }
 const _render=render; render=function(){ _render(); requestAnimationFrame(reportHeight); };
 
-try{ P=load(); buildPad(); lockRound(); reportHeight(); }
+try{ P=load();
+  // a test shared TO the Android app (via the share sheet) arrives here on open
+  try{ if(window.SyloxNative&&SyloxNative.pendingImport){ const pend=SyloxNative.pendingImport(); if(pend) window.__sxImport(pend); } }catch(e){}
+  buildPad(); lockRound(); reportHeight(); }
 catch(e){ document.body.innerHTML='<div class="err">overlay error: '+e.message+'</div>'; }
 </script>
 </body>

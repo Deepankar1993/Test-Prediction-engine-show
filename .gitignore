@@ -5,6 +5,17 @@ ref/
 # Local-only working notes (not for the public repo)
 CLAUDE.md
 
+# Signing keystores — never commit (kept as CI secrets only)
+*.jks
+*.keystore
+*.b64
+
+# Android build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
 # OS / editor junk
 Thumbs.db
 desktop.ini

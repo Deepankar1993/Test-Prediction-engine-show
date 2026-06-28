@@ -24,11 +24,13 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import org.json.JSONObject
 
 /**
  * Foreground service that draws a small, draggable, see-through floating window over any
  * other app. The window hosts a WebView that loads the compact predictor UI from GitHub
- * Pages (so updates ship via git push, no rebuild). A native title strip provides drag + close.
+ * Pages (so updates ship via git push, no rebuild). A native title strip provides drag + close;
+ * a JS bridge handles resize, close, open-full-tool, and export/import of the saved test.
  */
 class OverlayService : Service() {
 
@@ -37,6 +39,11 @@ class OverlayService : Service() {
         const val FULL_URL = "https://deepankar1993.github.io/Test-Prediction-engine-show/"
         const val OVERLAY_URL =
             "https://deepankar1993.github.io/Test-Prediction-engine-show/overlay.html?app=1"
+
+        // FileActivity (import) hands the picked JSON back to the live overlay here.
+        @Volatile
+        var live: OverlayService? = null
+        fun inject(json: String) { live?.injectImport(json) }
     }
 
     private lateinit var wm: WindowManager
@@ -51,6 +58,7 @@ class OverlayService : Service() {
         startForeground(1, buildNotification())
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         addOverlay()
+        live = this
     }
 
     private fun dp(v: Int): Int = TypedValue.applyDimension(
@@ -136,7 +144,15 @@ class OverlayService : Service() {
         wm.addView(container, lp)
     }
 
-    /** Called from overlay.html JS so the floating window hugs the content (no dead-zone). */
+    /** Push imported JSON (from FileActivity) into the overlay's saved test. */
+    fun injectImport(json: String) {
+        val w = web ?: return
+        Handler(mainLooper).post {
+            w.evaluateJavascript("window.__sxImport(" + JSONObject.quote(json) + ")", null)
+        }
+    }
+
+    /** Called from overlay.html JS. */
     inner class Bridge {
         @JavascriptInterface
         fun resize(cssHeight: Int) {
@@ -154,11 +170,31 @@ class OverlayService : Service() {
         fun close() { Handler(mainLooper).post { stopSelf() } }
 
         @JavascriptInterface
-        fun openFull() {
-            val i = Intent(Intent.ACTION_VIEW, Uri.parse(FULL_URL))
+        fun openFull() { startExternal(Intent(Intent.ACTION_VIEW, Uri.parse(FULL_URL))) }
+
+        // export: save the test JSON to a file the user chooses (then import it in the browser tool)
+        @JavascriptInterface
+        fun share(json: String) { openFile("export", json) }
+
+        // import: pick a JSON file the browser tool exported, and load it here
+        @JavascriptInterface
+        fun importFile() { openFile("import", null) }
+
+        private fun openFile(mode: String, json: String?) {
+            val i = Intent(this@OverlayService, FileActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(i)
+                .putExtra("mode", mode)
+            if (json != null) i.putExtra("json", json)
+            startExternal(i)
         }
+
+        private fun startExternal(i: Intent) {
+            try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
+        }
+    }
+
+    private fun startExternal(i: Intent) {
+        try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
     }
 
     private fun buildNotification(): Notification {
@@ -180,6 +216,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (live === this) live = null
         root?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         root = null
         web = null

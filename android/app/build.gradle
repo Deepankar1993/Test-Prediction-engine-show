@@ -7,12 +7,25 @@ android {
     namespace 'tech.sylox.predictor'
     compileSdk 35
 
+    signingConfigs {
+        release {
+            def ks = System.getenv("ANDROID_KEYSTORE_FILE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId 'tech.sylox.predictor'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.0'
+        // CI passes an incrementing VERSION_CODE so signed updates install in place.
+        versionCode (System.getenv("VERSION_CODE") ?: "1").toInteger()
+        versionName (System.getenv("VERSION_NAME") ?: "1.0")
     }
 
     buildTypes {
@@ -22,6 +35,8 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // signed when the keystore env is present (CI); plain unsigned release otherwise.
+            signingConfig System.getenv("ANDROID_KEYSTORE_FILE") ? signingConfigs.release : null
         }
     }
 
@@ -37,5 +52,5 @@ android {
     }
 }
 
-dependencies {
-}
+// Zero runtime dependencies — framework WebView/WindowManager/Notification only.
+dependencies { }
