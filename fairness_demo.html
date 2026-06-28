@@ -302,6 +302,30 @@
     padding:11px 18px;border-radius:10px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;text-align:center}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast b{color:var(--good)}
+
+  /* export-backup reminder + history table */
+  .backupnote{font-family:var(--mono);font-size:11px}
+  .bk-warn{color:#ffd27f} .bk-ok{color:var(--faint)}
+  .hist-card{max-width:680px}
+  .hist-scroll{max-height:62vh;overflow:auto;border:1px solid var(--line-soft);border-radius:10px}
+  .histtable{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px}
+  .histtable thead th{position:sticky;top:0;background:#0f1925;color:var(--faint);text-align:left;
+    padding:9px 12px;font-weight:500;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+  .histtable td{padding:8px 12px;border-bottom:1px solid var(--line-soft);color:var(--muted)}
+  .histtable tr:last-child td{border-bottom:none}
+  .histtable td b{color:var(--text)}
+  .h-hit{color:var(--good);font-weight:600} .h-miss{color:var(--faint)}
+  .hist-foot2{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:8px;line-height:1.5}
+
+  /* recent-results strip + activity pulse */
+  .recent{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:8px 0 2px}
+  .recent .rlab{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+  .recent .rv{font-family:var(--mono);font-size:12.5px;min-width:25px;text-align:center;padding:3px 6px;border-radius:5px;
+    background:#0d1722;border:1px solid var(--line-soft);color:var(--muted);transition:.15s}
+  .recent .rv.hit{border-color:#1c4a3b;color:var(--good)}
+  .recent .rv.now{outline:2px solid var(--steel);outline-offset:1px;color:var(--text);font-weight:600}
+  .bigchips.pulse{animation:chippulse .5s ease}
+  @keyframes chippulse{0%{opacity:.3;transform:translateY(-2px)}100%{opacity:1;transform:none}}
   .rl .hitn{color:var(--bad);font-weight:600}
   .rl .missn{color:var(--good);font-weight:600}
   .recd{color:var(--bad);font-weight:600}
@@ -700,12 +724,15 @@ function newState(){
     Hold:nums.slice(), Hnew:[], reels:[], Wold:newWeights(), Wnew:newWeights(),
     Wr:[newWeights(),newWeights(),newWeights()],
     oH:0,oR:0, bH:0, nH:0,nR:0, streak:0, best:0, days:{}, lastTs:null,
+    rounds:[], lastExport:0,
     seed:($('clientSeed').value||'player')+'-'+Math.floor(Math.random()*1e9).toString(36)};
   if(st.Hold.length<=800) for(let i=12;i<st.Hold.length;i++){    // warm signal weights on the pasted history
     const dists=sigAll(st.Hold.slice(0,i)); updateWeights(st.Wold,dists,st.Hold[i],K_OLD); }
   return st;
 }
-function loadState(){ try{const s=JSON.parse(localStorage.getItem(LS_KEY)); return (s&&s.v===2)?s:null;}catch(e){return null;} }
+function loadState(){ try{const s=JSON.parse(localStorage.getItem(LS_KEY));
+  if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0; return s; } return null; }catch(e){return null;} }
+const REMIND_EVERY=30;   // nudge the tester to back up every N live rounds
 function saveState(){ if(isDemo) return; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){} }
 
 function buildArena(){
@@ -713,8 +740,10 @@ function buildArena(){
   <div class="statusbar">
     <span class="mode" id="modeTag">● LIVE TEST</span>
     <span class="counts" id="counts"></span>
+    <span class="backupnote" id="backupNote"></span>
     <span class="ctrls">
       <button class="mini hi" id="btnFocus">&#9974; focus testing</button>
+      <button class="mini" id="btnHistory">&#128203; history</button>
       <button class="mini" id="btnMode"></button>
       <button class="mini" id="apWeak">&#9654; simulate weak</button>
       <button class="mini" id="apFair">&#9654; simulate fair</button>
@@ -737,6 +766,7 @@ function buildArena(){
         <b>Check them against the live app.</b></div>
       <div class="bigchips" id="oldChips"></div>
       <div class="patline" id="oldPattern"></div>
+      <div class="recent" id="oldRecent"></div>
       <div class="rl"><span class="k">last round</span><span id="oldOutcome">&mdash;</span></div>
       <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 8?</span><span></span></div><div id="logL"></div></div>
     </div>
@@ -756,6 +786,7 @@ function buildArena(){
   $('btnMode').textContent = P.mode==='reels' ? 'sum entry (0–27)' : 'reel entry (3 digits)';
   renderEntry('numpad', false);
   $('btnFocus').onclick=openFocus;
+  $('btnHistory').onclick=openHistory;
   $('btnMode').onclick=toggleMode;
   $('apWeak').onclick=()=>startDemo('weak');
   $('apFair').onclick=()=>startDemo('fair');
@@ -814,6 +845,8 @@ function lockRound(){
   $('newCommit').textContent='commit '+cur.fair.commit.slice(0,14)+'…';
   const ps=patternStatus(cur.old.list);
   if($('oldPattern')){ $('oldPattern').className='patline '+ps.cls; $('oldPattern').innerHTML=ps.txt; }
+  if($('oldRecent')) $('oldRecent').innerHTML=recentStrip();
+  pulse($('oldChips'));
   if(focusOpen) renderFocus();
 }
 // is the prediction tracking real structure, or just the fair central block?
@@ -828,6 +861,15 @@ function logRow(id,n,result,hit,extra){
    `<div class="log-row"><span class="neutral">${n}</span><span>${result}</span>`+
    `<span class="${hit?'hit':'miss'}">${hit?'✓':'—'}</span><span>${extra||''}</span></div>`);
 }
+// the last ~10 results (newest on the right); green = it landed in our 8 that round
+function recentStrip(){
+  const lab='<span class="rlab">recent &rarr;</span>';
+  const rec=(P.rounds&&P.rounds.length)?P.rounds.slice(-10):null;
+  if(rec) return lab+rec.map((e,i)=>`<span class="rv${e.oh?' hit':''}${i===rec.length-1?' now':''}">${e.s}</span>`).join('');
+  const tail=(P.Hold||[]).slice(-10);
+  return lab+(tail.length?tail.map(v=>`<span class="rv">${v}</span>`).join(''):'<span class="dim">no results yet</span>');
+}
+function pulse(el){ if(!el)return; el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); }
 function submit(A){ if(!P) return; resolveRound(A, null, true); }       // sum tap = a real live-app result
 function submitReels(rs){ if(!P) return; resolveRound(rs[0]+rs[1]+rs[2], rs, true); }
 function resolveRound(actual, reels, toBox){
@@ -845,6 +887,7 @@ function resolveRound(actual, reels, toBox){
   P.streak=oldHit?P.streak+1:0; if(P.streak>P.best)P.best=P.streak;
   const ts=Date.now(); P.lastTs=ts; const dk=dayKey(ts);
   const dd=P.days[dk]||(P.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oldHit)dd.oH++; if(BASE8set.has(actual))dd.bH++;
+  if(!isDemo) P.rounds.push({t:ts, s:actual, r:reels||null, oh:oldHit, nr:res, nh:newHit});  // timestamped log (real rounds only)
   // feedback
   const shown=`${actual}${reels?` <span class="dim">(${reels.join('+')})</span>`:''}`;
   $('oldOutcome').innerHTML=oldHit?`<span class="hitn">PREDICTED ✓ — ${shown} was in our 8</span>`
@@ -877,6 +920,12 @@ function render(){
     `<span class="atext">${text}</span>`+
     `<span class="anote">${P.oR} rounds · ${days} day${days===1?'':'s'} · streak ${P.streak} (best ${P.best}) · saved on this device</span>`;
   $('counts').innerHTML=`<b>${P.oR}</b> rounds · <b>${days}</b> day${days===1?'':'s'} · streak <b>${P.streak}</b>`;
+  // export-backup reminder
+  const unsaved=P.oR-(P.lastExport||0), bn=$('backupNote');
+  if(bn){ bn.innerHTML = unsaved>=REMIND_EVERY ? `<span class="bk-warn">&#9888; back up — ${unsaved} new rounds unsaved to file</span>`
+        : (P.lastExport>0 ? `<span class="bk-ok">backed up &#10003; · ${unsaved} since</span>` : ''); }
+  if($('btnExport')) $('btnExport').classList.toggle('hi', unsaved>=REMIND_EVERY);
+  if(!isDemo && unsaved>0 && unsaved%REMIND_EVERY===0) toast(`<b>Reminder:</b> ${unsaved} rounds since your last backup — tap <b>export</b> to save a copy you can re-import.`);
   const bp=P.oR?(b*100).toFixed(0):(baseProb8*100).toFixed(0);
   $('edgeNote').innerHTML=
     `<b>How to read it.</b> The no-skill baseline is what a fixed central-8 cover scores on this exact stream — currently <b>${bp}%</b> `+
@@ -898,6 +947,7 @@ function ensureFocus(){
         <div class="fp-lab">Old engine · our 8 — <b>check the live game</b></div>
         <div class="bigchips" id="fOldChips"></div>
         <div class="patline" id="fPattern"></div>
+        <div class="recent" id="fRecent"></div>
         <div class="fp-out" id="fOldOut">&mdash;</div>
       </div>
       <div class="focus-new">
@@ -923,6 +973,9 @@ function renderFocus(){
     `edge <b>${(e>=0?'+':'')+e.toFixed(0)}pt</b> · streak <b>${P.streak}</b>`;
   $('fOldChips').innerHTML=chips(cur.old.list,'old');
   $('fNewChips').innerHTML=chips(cur.nw.list,'new');
+  const ps=patternStatus(cur.old.list);
+  if($('fPattern')){ $('fPattern').className='patline '+ps.cls; $('fPattern').innerHTML=ps.txt; }
+  if($('fRecent')) $('fRecent').innerHTML=recentStrip();
   $('fOldOut').innerHTML=$('oldOutcome')?$('oldOutcome').innerHTML:'—';
   $('fNewOut').innerHTML=($('newOutcome')?$('newOutcome').innerHTML:'')+' '+($('newVerify')?$('newVerify').innerHTML:'');
 }
@@ -948,6 +1001,44 @@ function exportData(){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='sylox-livetest-'+dayKey(Date.now())+'.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  P.lastExport=P.oR; saveState(); render();
+  toast(`<b>Backed up</b> ${P.oR} rounds &amp; the learned model — keep the file safe; re-import to restore.`);
+}
+
+// ---- history: a timestamped log of every real test round (date + time) ----
+function ensureHistory(){
+  if($('histOverlay')) return;
+  const o=document.createElement('div'); o.id='histOverlay'; o.className='focus-overlay'; o.style.display='none';
+  o.innerHTML=`<div class="focus-card hist-card">
+    <div class="focus-head"><span class="fmode">&#128203; History</span><span class="fstats" id="hCount"></span>
+      <button class="mini" id="hExport">export</button>
+      <button class="fclose" id="hClose" aria-label="close">&times;</button></div>
+    <div class="hist-scroll"><table class="histtable">
+      <thead><tr><th>#</th><th>date</th><th>time</th><th>result</th><th>our&nbsp;8</th><th>Sylox</th></tr></thead>
+      <tbody id="hBody"></tbody></table></div>
+    <div class="hist-foot2" id="hFoot"></div></div>`;
+  document.body.appendChild(o);
+  $('hClose').onclick=closeHistory; $('hExport').onclick=exportData;
+  o.onclick=e=>{ if(e.target===o) closeHistory(); };
+}
+function openHistory(){ ensureHistory(); $('histOverlay').style.display='flex'; document.body.style.overflow='hidden'; renderHistory(); }
+function closeHistory(){ if($('histOverlay'))$('histOverlay').style.display='none'; document.body.style.overflow=''; }
+function renderHistory(){
+  const rows=P.rounds||[], n=rows.length;
+  $('hCount').innerHTML=`<b>${n}</b> logged round${n===1?'':'s'}`;
+  const show=rows.slice(-1000).reverse();
+  let h='';
+  for(let i=0;i<show.length;i++){ const e=show[i], idx=n-i, d=new Date(e.t);
+    const date=d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    const time=d.toLocaleTimeString(undefined,{hour12:false});
+    const resTxt=e.s+(e.r?` <span class="dim">(${e.r.join('+')})</span>`:'');
+    h+=`<tr><td>${idx}</td><td>${date}</td><td>${time}</td><td><b>${resTxt}</b></td>`+
+       `<td class="${e.oh?'h-hit':'h-miss'}">${e.oh?'&#10003; predicted':'&mdash;'}</td>`+
+       `<td class="dim">${e.nr}${e.nh?'':' &middot; evaded'}</td></tr>`;
+  }
+  $('hBody').innerHTML=h||'<tr><td colspan="6" class="dim" style="padding:18px">No live rounds yet — tap results to start logging.</td></tr>';
+  $('hFoot').innerHTML = n>1000 ? `showing the most recent 1000 of ${n} — use <b>export</b> for the full log.`
+    : 'Every real result is timestamped and saved on this device. <b>Export</b> for an off-device backup.';
 }
 function importData(file){ const r=new FileReader();
   r.onload=()=>{ try{const s=JSON.parse(r.result);
