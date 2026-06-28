@@ -3,6 +3,12 @@
 **Sylox Tech** · a result engine for licensed gaming operators that players can
 **verify** and exploiters **can't predict**.
 
+**▶ Live prediction tool:** https://deepankar1993.github.io/sylox-evaluation-kit/
+— learns a game's result history, posts its 8 most-likely numbers for the next round to
+check against the live game (or 3 reel digits for deeper structure), and shows that the
+same engine gets no edge against the commit-reveal engine. Your test is saved in the
+browser across days; use **export/import** to carry it between machines.
+
 This kit lets you evaluate it yourself in a few minutes. It has three pieces and
 two ways to open them — pick whichever fits you.
 
