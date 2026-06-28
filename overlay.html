@@ -233,6 +233,8 @@ function reportHeight(){ try{ if(window.SyloxNative&&SyloxNative.resize){
 const _render=render; render=function(){ _render(); requestAnimationFrame(reportHeight); };
 
 try{ P=load();
+  // self-clean: drop any warm-up/seed rounds so the overlay tracks live results only (no file needed)
+  if(P.rounds&&P.rounds.some(r=>r&&r.seed)){ P=rebuildFrom(P.rounds.filter(r=>!(r&&r.seed)),P.seed,P.created); save(); }
   // a test shared TO the Android app (via the share sheet) arrives here on open
   try{ if(window.SyloxNative&&SyloxNative.pendingImport){ const pend=SyloxNative.pendingImport(); if(pend) window.__sxImport(pend); } }catch(e){}
   buildPad(); lockRound(); reportHeight(); }

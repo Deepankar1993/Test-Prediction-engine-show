@@ -1135,7 +1135,14 @@ function resetTest(){
   if(!confirm('Reset the live test? This clears the saved rounds and reseeds from the history box.')) return;
   try{localStorage.removeItem(LS_KEY);}catch(e){} isDemo=false; P=newState(); buildArena(); lockRound(); render();
 }
-function beginSession(){ stopAuto(); isDemo=false; P=loadState()||newState(); buildArena(); lockRound(); render(); }
+function beginSession(){ stopAuto(); isDemo=false; P=loadState()||newState();
+  // self-clean: drop any warm-up/seed rounds so the tool tracks live results only (keeps the observed-history prefix)
+  if(P.rounds && P.rounds.some(r=>r&&r.seed)){
+    const liveR=P.rounds.filter(r=>!(r&&r.seed));
+    const seedHist=(P.Hold||[]).slice(0, Math.max(0,(P.Hold||[]).length - P.rounds.length));
+    P=rebuildFrom(liveR, seedHist, P.seed, P.created, P.mode||'sum'); saveState();
+  }
+  buildArena(); lockRound(); render(); }
 function toast(msg){ let t=$('toast'); if(!t){ t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   t.innerHTML=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2600); }
 function flashStarted(){
