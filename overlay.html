@@ -22,6 +22,8 @@
   .prow{display:flex;align-items:center;gap:6px;margin-bottom:5px}
   .prow .lab{font-size:9.5px;letter-spacing:.08em;color:var(--faint);min-width:26px}
   .chips{display:flex;gap:4px;flex-wrap:wrap;flex:1}
+  .opct{font-size:10px;font-weight:700;color:var(--mut);white-space:nowrap;min-width:30px;text-align:right}
+  .opct small{font-size:8px;font-weight:400;color:var(--faint);display:block;line-height:1}
   .chip{font-size:13px;font-weight:700;min-width:24px;text-align:center;padding:3px 4px;border-radius:6px}
   .old .chip{background:#22120f;border:1px solid rgba(239,93,68,.55);color:#ff9d8b}
   .new .chip{background:#0f2018;border:1px solid rgba(34,192,138,.55);color:#7fe3c0}
@@ -54,7 +56,7 @@
     <button class="x" id="x" title="close">×</button>
   </div>
   <div class="body">
-    <div class="prow old"><span class="lab">OLD&nbsp;8</span><span class="chips" id="old"></span></div>
+    <div class="prow old"><span class="lab">OLD&nbsp;8</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 8"></span></div>
     <div class="prow new"><span class="lab">NEW&nbsp;4</span><span class="chips" id="new"></span></div>
     <div class="status" id="status">Tap the result that came up on the game.</div>
     <div class="recent" id="recent"></div>
@@ -146,6 +148,10 @@ function render(){
   chips(cur.old.list,'old'); chips(cur.nw.list,'new');
   const o=P.oR?Math.round(P.oH/P.oR*100):0, b=P.oR?Math.round(P.bH/P.oR*100):0;
   $('st').textContent=`${P.oR}r · ${o}% (base ${b}%) · ✦${P.streak}`;
+  const op=$('oldPct');
+  if(op){ if(P.oR){ op.innerHTML=`${o}%<small>${P.oH}/${P.oR} hit</small>`;
+      op.style.color = o>=b ? '#7fe3c0' : (o>=b-4 ? '#ffd27f' : '#ff9d8b'); }   // green=beats baseline, amber=near, red=below
+    else { op.innerHTML='<small>—</small>'; op.style.color=''; } }
   const L=P._last;
   $('status').innerHTML = L
     ? (L.oldHit?`<span class="hit">✓ HIT</span> — ${L.actual} was in OUR 8. `:`<span class="miss">✗ miss</span> — result ${L.actual}. `)
