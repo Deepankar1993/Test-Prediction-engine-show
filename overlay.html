@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sylox · floating predictor</title>
+<style>
+  :root{--good:#22c08a;--bad:#ef5d44;--steel:#5b8bd0;--mut:#9fb2c4;--faint:#6b8095;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
+  html,body{background:transparent}
+  body{font-family:var(--mono);color:#eaf1f8;padding:5px}
+  .ov{max-width:340px;margin:0 auto;background:rgba(11,17,24,.82);border:1px solid rgba(91,139,208,.45);
+    border-radius:13px;backdrop-filter:blur(2px);box-shadow:0 6px 22px rgba(0,0,0,.5);overflow:hidden}
+  .bar{display:flex;align-items:center;gap:6px;padding:6px 9px;background:rgba(15,25,37,.9);
+    border-bottom:1px solid rgba(91,139,208,.25);font-size:11px;letter-spacing:.04em;color:var(--steel);font-weight:600}
+  .bar .grip{color:var(--faint);font-weight:400}
+  .bar .st{margin-left:auto;color:var(--mut);font-weight:400;font-size:10.5px}
+  .bar .x{background:rgba(40,30,30,.8);border:1px solid rgba(239,93,68,.4);color:#ff9d8b;
+    width:22px;height:22px;border-radius:7px;font-size:14px;line-height:1;cursor:pointer}
+  .body{padding:8px 9px 9px}
+  .prow{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+  .prow .lab{font-size:9.5px;letter-spacing:.08em;color:var(--faint);min-width:26px}
+  .chips{display:flex;gap:4px;flex-wrap:wrap;flex:1}
+  .chip{font-size:13px;font-weight:700;min-width:24px;text-align:center;padding:3px 4px;border-radius:6px}
+  .old .chip{background:#22120f;border:1px solid rgba(239,93,68,.55);color:#ff9d8b}
+  .new .chip{background:#0f2018;border:1px solid rgba(34,192,138,.55);color:#7fe3c0}
+  .status{font-size:11px;margin:6px 0 4px;min-height:15px;color:var(--mut);line-height:1.35}
+  .status .hit{color:var(--good);font-weight:700}
+  .status .miss{color:var(--bad);font-weight:700}
+  .recent{display:flex;align-items:center;gap:4px;margin-bottom:7px;font-size:10px;color:var(--faint)}
+  .recent .rl{letter-spacing:.06em}
+  .recent .rv{min-width:19px;text-align:center;padding:2px 4px;border-radius:4px;
+    background:rgba(13,23,34,.9);border:1px solid rgba(91,139,208,.2);color:var(--mut)}
+  .recent .rv.h{border-color:rgba(34,192,138,.5);color:var(--good)}
+  .recent .rv.now{outline:1.5px solid var(--steel)}
+  .pad{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .pad .n{font-size:13px;font-weight:600;padding:8px 0;border-radius:7px;background:rgba(22,33,47,.92);
+    border:1px solid rgba(91,139,208,.3);color:#eaf1f8;cursor:pointer;transition:.08s}
+  .pad .n:active{background:var(--steel);color:#06121f;transform:scale(.94)}
+  .miniBtns{display:flex;gap:5px;margin-top:7px}
+  .mini{flex:1;font-size:10px;padding:5px 0;border-radius:6px;background:rgba(15,25,37,.85);
+    border:1px solid rgba(91,139,208,.25);color:var(--mut);cursor:pointer;text-align:center}
+  .err{color:var(--bad);font-size:11px;padding:10px}
+</style>
+</head>
+<body>
+<div class="ov" id="ov">
+  <div class="bar" id="bar">
+    <span class="grip">⋮⋮</span> SYLOX <span class="st" id="st"></span>
+    <button class="x" id="x" title="close">×</button>
+  </div>
+  <div class="body">
+    <div class="prow old"><span class="lab">OLD&nbsp;8</span><span class="chips" id="old"></span></div>
+    <div class="prow new"><span class="lab">NEW&nbsp;4</span><span class="chips" id="new"></span></div>
+    <div class="status" id="status">Tap the result that came up on the game.</div>
+    <div class="recent" id="recent"></div>
+    <div class="pad" id="pad"></div>
+    <div class="miniBtns"><div class="mini" id="undo">undo last</div><div class="mini" id="open">full tool ↗</div></div>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script>
+/* compact floating predictor — shares the sylox_livetest_v2 test with the full tool */
+const LS='sylox_livetest_v2', K_OLD=8, K_NEW=4;
+const BASE8set=new Set(topK(PRIOR,8));
+const $=id=>document.getElementById(id);
+const dayKey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();};
+let P=null, cur=null;
+
+function fresh(){ return {v:2,created:Date.now(),mode:'sum',Hold:[],Hnew:[],reels:[],
+  Wold:newWeights(),Wnew:newWeights(),Wr:[newWeights(),newWeights(),newWeights()],
+  oH:0,oR:0,bH:0,nH:0,nR:0,streak:0,best:0,days:{},lastTs:null,rounds:[],lastExport:0,
+  seed:'player-'+Math.floor(Math.random()*1e9).toString(36)}; }
+function load(){ try{const s=JSON.parse(localStorage.getItem(LS));
+  if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0;
+    if(!s.Wold)s.Wold=newWeights(); if(!s.Wnew)s.Wnew=newWeights(); return s; } }catch(e){} return fresh(); }
+function save(){ try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){} }
+
+function chips(arr,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>`<span class="chip">${n}</span>`).join(''); }
+function lockRound(){
+  cur={ old:predict(P.Hold,P.Wold,K_OLD), nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
+  render();
+}
+function resolve(actual){
+  const oldHit=cur.old.list.indexOf(actual)>=0; P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
+  updateWeights(P.Wold,cur.old.dists,actual,K_OLD); P.Hold.push(actual);
+  const res=cur.fair.result, ok=fairVerify(cur.fair), newHit=cur.nw.list.indexOf(res)>=0;
+  P.nR++; if(newHit)P.nH++; updateWeights(P.Wnew,cur.nw.dists,res,K_NEW); P.Hnew.push(res);
+  P.streak=oldHit?P.streak+1:0; if(P.streak>P.best)P.best=P.streak;
+  const ts=Date.now(); P.lastTs=ts; const dk=dayKey(ts);
+  const dd=P.days[dk]||(P.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oldHit)dd.oH++; if(BASE8set.has(actual))dd.bH++;
+  P.rounds.push({t:ts,s:actual,r:null,oh:oldHit,nr:res,nh:newHit});
+  P._last={actual,oldHit,res,newHit,ok};
+  save(); lockRound();
+}
+function undo(){
+  if(!P.rounds.length) return;
+  // rebuild state from history minus the last round (cheap: replay)
+  const rounds=P.rounds.slice(0,-1);
+  const np=fresh(); np.seed=P.seed; np.created=P.created;
+  for(const e of rounds){
+    const c={ old:predict(np.Hold,np.Wold,K_OLD), nw:predict(np.Hnew,np.Wnew,K_NEW) };
+    const oh=c.old.list.indexOf(e.s)>=0; np.oR++; if(oh)np.oH++; if(BASE8set.has(e.s))np.bH++;
+    updateWeights(np.Wold,c.old.dists,e.s,K_OLD); np.Hold.push(e.s);
+    const nh=c.nw.list.indexOf(e.nr)>=0; np.nR++; if(nh)np.nH++;
+    updateWeights(np.Wnew,c.nw.dists,e.nr,K_NEW); np.Hnew.push(e.nr);
+    np.streak=oh?np.streak+1:0; if(np.streak>np.best)np.best=np.streak;
+    const dk=dayKey(e.t); const dd=np.days[dk]||(np.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oh)dd.oH++; if(BASE8set.has(e.s))dd.bH++;
+    np.rounds.push(e);
+  }
+  np.lastExport=Math.min(P.lastExport,np.oR);
+  P=np; P._last=null; save(); lockRound();
+}
+function render(){
+  chips(cur.old.list,'old'); chips(cur.nw.list,'new');
+  const o=P.oR?Math.round(P.oH/P.oR*100):0, b=P.oR?Math.round(P.bH/P.oR*100):0;
+  $('st').textContent=`${P.oR}r · ${o}% (base ${b}%) · ✦${P.streak}`;
+  const L=P._last;
+  $('status').innerHTML = L
+    ? (L.oldHit?`<span class="hit">✓ HIT</span> — ${L.actual} was in OUR 8. `:`<span class="miss">✗ miss</span> — result ${L.actual}. `)
+      + `Sylox: ${L.res} ${L.newHit?'(chance hit)':'<span class="hit">evaded</span>'}.`
+    : 'Tap the result that came up on the game.';
+  const rec=P.rounds.slice(-5);
+  $('recent').innerHTML='<span class="rl">recent →</span>'+rec.map((e,i)=>
+    `<span class="rv${e.oh?' h':''}${i===rec.length-1?' now':''}">${e.s}</span>`).join('') || '';
+}
+function buildPad(){ let h=''; for(let n=0;n<=27;n++) h+=`<button class="n" data-n="${n}">${n}</button>`;
+  $('pad').innerHTML=h; $('pad').querySelectorAll('.n').forEach(b=>b.onclick=()=>resolve(+b.dataset.n)); }
+
+$('x').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.close) SyloxNative.close(); }catch(e){} };
+$('undo').onclick=undo;
+$('open').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.openFull) SyloxNative.openFull();
+  else window.open('fairness_demo.html','_blank'); }catch(e){ location.href='fairness_demo.html'; } };
+
+try{ P=load(); buildPad(); lockRound(); }
+catch(e){ document.body.innerHTML='<div class="err">overlay error: '+e.message+'</div>'; }
+</script>
+</body>
+</html>
