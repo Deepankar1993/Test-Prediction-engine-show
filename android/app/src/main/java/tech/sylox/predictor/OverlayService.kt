@@ -128,13 +128,16 @@ class OverlayService : Service() {
             setBackgroundColor(Color.TRANSPARENT)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.cacheMode = WebSettings.LOAD_DEFAULT
+            // ALWAYS pull the latest UI/logic from GitHub Pages (this is the whole point of
+            // the WebView shell). LOAD_DEFAULT cached engine.js, which froze old behaviour.
+            settings.cacheMode = WebSettings.LOAD_NO_CACHE
             webViewClient = WebViewClient()
             addJavascriptInterface(Bridge(), "SyloxNative")
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(430)
             )
-            loadUrl(OVERLAY_URL)
+            clearCache(true)
+            loadUrl(OVERLAY_URL + "&t=" + System.currentTimeMillis())
         }
         web = w
 
