@@ -115,6 +115,9 @@ function resolve(actual){
 function rebuildFrom(rounds, seed, created){
   const np=fresh(); np.seed=seed; np.created=created;
   for(const e of rounds){
+    if(e.seed){ // prior/warm-up history: trains the OLD engine, never scored as a live round
+      const sp=predict(np.Hold,np.Wold,K_OLD); updateWeights(np.Wold,sp.dists,e.s,K_OLD);
+      np.Hold.push(e.s); np.rounds.push(e); continue; }
     const c={ old:predict(np.Hold,np.Wold,K_OLD), nw:predict(np.Hnew,np.Wnew,K_NEW) };
     const oh=c.old.list.indexOf(e.s)>=0; np.oR++; if(oh)np.oH++; if(BASE8set.has(e.s))np.bH++;
     updateWeights(np.Wold,c.old.dists,e.s,K_OLD); np.Hold.push(e.s);
