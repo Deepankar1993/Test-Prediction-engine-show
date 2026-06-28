@@ -45,6 +45,11 @@
   .pad .n{font-size:13px;font-weight:600;padding:8px 0;border-radius:7px;background:rgba(22,33,47,.92);
     border:1px solid rgba(91,139,208,.3);color:#eaf1f8;cursor:pointer;transition:.08s}
   .pad .n:active{background:var(--steel);color:#06121f;transform:scale(.94)}
+  .modeRow{display:flex;align-items:center;gap:6px;margin:2px 0 4px}
+  .modeRow .elab{font-size:9.5px;color:var(--faint);flex:0 0 auto}
+  .modeRow .reelPicks{flex:1;font-size:12px;color:#ff9d8b;font-weight:700}
+  .modeRow .reelPicks .dim{color:var(--faint);font-weight:400}
+  .modeRow #modeBtn{flex:0 0 auto;font-size:9.5px;padding:4px 7px}
   .miniBtns{display:flex;gap:5px;margin-top:7px}
   .mini{flex:1;font-size:10px;padding:5px 0;border-radius:6px;background:rgba(15,25,37,.85);
     border:1px solid rgba(91,139,208,.25);color:var(--mut);cursor:pointer;text-align:center}
@@ -66,6 +71,7 @@
     <div class="trust" id="trust"></div>
     <div class="status" id="status">Tap the result that came up on the game.</div>
     <div class="recent" id="recent"></div>
+    <div class="modeRow"><span class="elab" id="entryLab">tap the result (0–27)</span><span class="reelPicks" id="reelPicks"></span><div class="mini" id="modeBtn">3-digit entry</div></div>
     <div class="pad" id="pad"></div>
     <div class="miniBtns">
       <div class="mini" id="sync">⇅ sync</div>
@@ -126,7 +132,7 @@ function lockRound(){
   cur={ old:blendBet(full,P), nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
   render();
 }
-function resolve(actual){
+function resolve(actual, reels){
   const oldHit=cur.old.list.indexOf(actual)>=0; P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
   if(P.Hold.length>=12){ P.shN=(P.shN||0)+1; if(cur.old.fullList.indexOf(actual)>=0)P.shH=(P.shH||0)+1; }  // shadow: would the full engine have hit?
   trackTrust(P, cur.old.fullPool, actual);
@@ -136,7 +142,7 @@ function resolve(actual){
   P.streak=oldHit?P.streak+1:0; if(P.streak>P.best)P.best=P.streak;
   const ts=Date.now(); P.lastTs=ts; const dk=dayKey(ts);
   const dd=P.days[dk]||(P.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oldHit)dd.oH++; if(BASE8set.has(actual))dd.bH++;
-  P.rounds.push({t:ts,s:actual,r:null,oh:oldHit,nr:res,nh:newHit});
+  P.rounds.push({t:ts,s:actual,r:reels||null,oh:oldHit,nr:res,nh:newHit});
   P._last={actual,oldHit,res,newHit,ok};
   save(); lockRound();
 }
@@ -203,11 +209,33 @@ function render(){
   $('recent').innerHTML='<span class="rl">recent →</span>'+rec.map((e,i)=>
     `<span class="rv${e.oh?' h':''}${i===rec.length-1?' now':''}">${e.s}</span>`).join('') || '';
 }
-function buildPad(){ let h=''; for(let n=0;n<=27;n++) h+=`<button class="n" data-n="${n}">${n}</button>`;
-  $('pad').innerHTML=h; $('pad').querySelectorAll('.n').forEach(b=>b.onclick=()=>resolve(+b.dataset.n)); }
+let reelPick=[];
+function buildPad(){
+  if(P.mode==='reels'){ buildReelPad(); return; }
+  let h=''; for(let n=0;n<=27;n++) h+=`<button class="n" data-n="${n}">${n}</button>`;
+  $('pad').innerHTML=h; $('pad').querySelectorAll('.n').forEach(b=>b.onclick=()=>resolve(+b.dataset.n));
+  if($('entryLab')){ $('entryLab').textContent='tap the result (0–27)'; $('reelPicks').innerHTML=''; $('modeBtn').textContent='3-digit entry'; }
+}
+function buildReelPad(){
+  let h=''; for(let d=0;d<=9;d++) h+=`<button class="n d" data-d="${d}">${d}</button>`;
+  $('pad').innerHTML=h; $('pad').querySelectorAll('.d').forEach(b=>b.onclick=()=>pickDigit(+b.dataset.d));
+  $('modeBtn').textContent='sum entry'; renderReelPicks();
+}
+function renderReelPicks(){ if(!$('reelPicks'))return;
+  $('entryLab').textContent='tap the 3 reel digits as they land';
+  $('reelPicks').innerHTML = reelPick.length
+    ? reelPick.join(' + ') + (reelPick.length<3 ? ' <span class="dim">…</span>' : ' = '+reelPick.reduce((a,b)=>a+b,0))
+    : '<span class="dim">digit 1 · 2 · 3</span>';
+}
+function pickDigit(d){ reelPick.push(d);
+  if(reelPick.length>=3){ const r=reelPick.slice(0,3); reelPick=[]; resolve(r[0]+r[1]+r[2], r); renderReelPicks(); }
+  else renderReelPicks();
+}
+function toggleMode(){ P.mode = (P.mode==='reels')?'sum':'reels'; reelPick=[]; save(); buildPad(); }
 
 $('x').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.close) SyloxNative.close(); }catch(e){} };
 $('undo').onclick=undo;
+$('modeBtn').onclick=toggleMode;
 $('open').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.openFull) SyloxNative.openFull();
   else window.open('fairness_demo.html','_blank'); }catch(e){ location.href='fairness_demo.html'; } };
 
