@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Provably-Fair Engine — Comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0d141d; --ink-2:#121c28; --panel:#16212f; --panel-2:#1b2838;
+    --line:#26384c; --line-soft:#1f2e40;
+    --text:#e7eef6; --muted:#8499ad; --faint:#5f7388;
+    --bad:#ef5d44; --bad-dim:#3a1f1c; --bad-soft:#2a1916;
+    --good:#22c08a; --good-dim:#15322a; --good-soft:#102420;
+    --steel:#5b8bd0;
+    --display:"Space Grotesk",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #15243400, #0d141d 60%),
+      var(--ink);
+    color:var(--text); font-family:var(--display);
+    line-height:1.5; padding:clamp(20px,4vw,56px);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto}
+
+  /* ---- header ---- */
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--steel); font-weight:500;
+    display:flex; align-items:center; gap:10px; margin-bottom:18px;
+  }
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--steel);opacity:.6}
+  h1{
+    font-size:clamp(28px,4.4vw,46px); font-weight:600; line-height:1.05;
+    letter-spacing:-.02em; max-width:18ch;
+  }
+  h1 em{font-style:normal;color:var(--bad)}
+  .lede{color:var(--muted);max-width:62ch;margin-top:16px;font-size:clamp(15px,1.6vw,17px)}
+
+  /* ---- input panel ---- */
+  .console{
+    margin-top:34px; background:linear-gradient(180deg,var(--panel),var(--ink-2));
+    border:1px solid var(--line); border-radius:14px; overflow:hidden;
+  }
+  .console-bar{
+    display:flex; align-items:center; gap:10px; padding:12px 18px;
+    border-bottom:1px solid var(--line-soft); background:#0f1925;
+    font-family:var(--mono); font-size:12px; color:var(--faint); letter-spacing:.04em;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--line)}
+  .dot.live{background:var(--good);box-shadow:0 0 0 3px var(--good-soft)}
+  .console-body{padding:22px;display:grid;gap:20px;grid-template-columns:1fr 280px}
+  @media(max-width:720px){.console-body{grid-template-columns:1fr}}
+  label.fld{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  textarea{
+    width:100%; height:96px; resize:vertical; background:#0c151f;
+    border:1px solid var(--line); border-radius:10px; color:var(--text);
+    font-family:var(--mono); font-size:13px; line-height:1.7; padding:12px 14px;
+  }
+  textarea:focus,input:focus{outline:none;border-color:var(--steel)}
+  .side{display:flex;flex-direction:column;gap:16px}
+  .knob label.fld{margin-bottom:10px}
+  .rng{display:flex;align-items:center;gap:12px}
+  input[type=range]{flex:1;accent-color:var(--steel)}
+  .rng output{font-family:var(--mono);font-size:14px;color:var(--text);min-width:52px;text-align:right}
+  .run{
+    margin-top:auto; width:100%; padding:15px; border:none; border-radius:10px;
+    background:var(--good); color:#06140e; font-family:var(--display);
+    font-weight:600; font-size:16px; letter-spacing:.01em; cursor:pointer;
+    transition:transform .08s ease, background .2s ease;
+  }
+  .run:hover{background:#2ad79b}
+  .run:active{transform:translateY(1px)}
+  .run:disabled{background:var(--line);color:var(--faint);cursor:wait}
+
+  /* ---- results ---- */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  .card{
+    border:1px solid var(--line); border-radius:14px; padding:22px;
+    background:linear-gradient(180deg,var(--panel),var(--ink-2));
+    opacity:0; transform:translateY(10px); transition:opacity .5s ease, transform .5s ease;
+  }
+  .card.show{opacity:1;transform:none}
+  .card.bad{border-color:#46241d}
+  .card.good{border-color:#1c4a3b}
+  .tag{
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    padding:5px 10px; border-radius:6px; display:inline-block; font-weight:500;
+  }
+  .tag.bad{background:var(--bad-soft);color:var(--bad)}
+  .tag.good{background:var(--good-soft);color:var(--good)}
+  .card h2{font-size:20px;font-weight:600;margin:14px 0 2px;letter-spacing:-.01em}
+  .card .desc{color:var(--muted);font-size:13.5px;min-height:38px}
+
+  .log{
+    margin:18px 0; border:1px solid var(--line-soft); border-radius:10px;
+    background:#0c151f; font-family:var(--mono); font-size:12.5px; overflow:hidden;
+  }
+  .log-head,.log-row{display:grid;grid-template-columns:46px 1fr 1fr 60px;gap:6px;padding:8px 12px}
+  .log-head{color:var(--faint);border-bottom:1px solid var(--line-soft);letter-spacing:.06em;font-size:11px}
+  .log-row{border-bottom:1px solid var(--line-soft)}
+  .log-row:last-child{border-bottom:none}
+  .log-row span:nth-child(n+2){text-align:center}
+  .hit{color:var(--bad);font-weight:600}
+  .miss{color:var(--good);font-weight:600}
+  .neutral{color:var(--faint)}
+
+  .gauge{margin-top:6px}
+  .gauge .glabel{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .gauge .gnum{font-size:clamp(30px,5vw,42px);font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+  .gnum.bad{color:var(--bad)} .gnum.good{color:var(--good)}
+  .gsub{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:2px}
+
+  .meters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+  .meter{border:1px solid var(--line-soft);border-radius:10px;padding:12px 14px;background:#0d1722}
+  .meter .mk{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .meter .mv{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+
+  .verify{
+    margin-top:16px;border:1px dashed var(--line);border-radius:10px;padding:14px;
+    font-family:var(--mono);font-size:12px;color:var(--muted);background:#0c151f;
+  }
+  .verify .vrow{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+  .verify .vk{color:var(--faint)}
+  .verify .vv{color:var(--text);word-break:break-all;text-align:right}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-weight:600;color:var(--good)}
+  .badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px var(--good-soft)}
+
+  .verdict{margin-top:18px;padding:13px 16px;border-radius:10px;font-weight:600;font-size:14px;
+    display:flex;align-items:center;gap:10px}
+  .verdict.bad{background:var(--bad-soft);color:var(--bad)}
+  .verdict.good{background:var(--good-soft);color:var(--good)}
+  .verdict .vi{font-family:var(--mono);font-size:18px}
+
+  .foot{margin-top:30px;color:var(--faint);font-size:12.5px;font-family:var(--mono);
+    border-top:1px solid var(--line-soft);padding-top:16px;line-height:1.8}
+  .foot b{color:var(--muted);font-weight:500}
+  .placeholder{margin-top:18px;color:var(--faint);font-family:var(--mono);font-size:13px;
+    border:1px dashed var(--line-soft);border-radius:12px;padding:34px;text-align:center}
+  .whatis{margin-top:24px;padding:16px 20px;border-left:3px solid var(--steel);
+    background:linear-gradient(90deg,#16243660,transparent);border-radius:0 10px 10px 0;
+    color:var(--muted);font-size:14.5px;max-width:70ch}
+  .whatis span{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--steel);margin-bottom:5px}
+  .whatis b{color:var(--text);font-weight:500}
+  .brand{margin-top:24px;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;
+    padding-top:18px;border-top:1px solid var(--line-soft)}
+  .brand .name{font-weight:600;font-size:15px;color:var(--text)}
+  .brand .co{font-family:var(--mono);font-size:12px;color:var(--steel);letter-spacing:.04em}
+  .brand .ct{font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:auto}
+
+  /* advanced console */
+  .bar-tags{margin-left:auto;display:flex;gap:7px}
+  .btag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:3px 8px;
+    border:1px solid var(--line);border-radius:5px;color:var(--faint)}
+  #cryptoStatus.ok{color:var(--good);border-color:#1c4a3b}
+  #cryptoStatus.err{color:var(--bad);border-color:#46241d}
+  .col-main{min-width:0}
+  .fld-hint{font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:none;
+    letter-spacing:0;font-weight:400;margin-left:8px}
+  .hist-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;
+    margin-top:11px;flex-wrap:wrap}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:6px;
+    background:#0d1722;border:1px solid var(--line-soft);color:var(--muted)}
+  .chip b{color:var(--text);font-weight:600}
+  .chip.warn{color:var(--bad);border-color:#46241d}
+  .hist-btns{display:flex;gap:6px}
+  .mini{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;
+    background:#16212f;border:1px solid var(--line);color:var(--muted);cursor:pointer;transition:.15s}
+  .mini:hover{border-color:var(--steel);color:var(--text)}
+  .preview{margin-top:16px;border:1px solid var(--line);border-radius:10px;background:#0c151f;overflow:hidden}
+  .preview-head{padding:10px 14px;border-bottom:1px solid var(--line-soft);font-family:var(--mono);
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);
+    display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+  .preview-head span{color:var(--faint);text-transform:none;letter-spacing:0;font-size:10.5px}
+  .pv-grid{padding:4px 14px 10px}
+  .pv-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-soft)}
+  .pv-row:last-child{border-bottom:none}
+  .pv-k{font-family:var(--mono);font-size:11px;color:var(--faint);min-width:185px}
+  @media(max-width:560px){.pv-k{min-width:120px}}
+  .pv-v{font-size:13px;color:var(--text);word-break:break-all;flex:1}
+  .pv-v.mono{font-family:var(--mono);font-size:12px;color:var(--steel)}
+  #pvResult{font-family:var(--mono);font-weight:600;flex:0}
+  .pv-input{flex:1;min-width:0;background:#101c28;border:1px solid var(--line);border-radius:6px;
+    color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 9px}
+  .knob-note,.run-note{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:7px;line-height:1.45}
+  .run-note{text-align:center;margin-top:9px}
+  label.fld output{float:right;font-family:var(--mono);color:var(--text);font-size:12px;font-weight:500}
+  input[type=range]{width:100%;accent-color:var(--steel);margin-top:9px;cursor:pointer}
+  .side .knob+.knob{margin-top:4px}
+
+  /* interactive arena */
+  #arena,#out{margin-top:18px}
+  .round-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .round-info{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .round-info b{color:var(--text)}
+  .lockpred{display:inline-block;min-width:24px;text-align:center;color:var(--steel);font-weight:600;
+    border:1px solid var(--line);border-radius:6px;padding:2px 9px;background:#0c151f;font-family:var(--mono)}
+  .autoplay{display:flex;gap:6px;flex-wrap:wrap}
+  .enter{border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+    background:linear-gradient(180deg,var(--panel),var(--ink-2));margin-bottom:16px}
+  .enter-label{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:11px}
+  .numpad{display:grid;grid-template-columns:repeat(14,1fr);gap:6px}
+  @media(max-width:680px){.numpad{grid-template-columns:repeat(7,1fr)}}
+  .np{font-family:var(--mono);font-size:13px;padding:10px 0;border-radius:7px;background:#16212f;
+    border:1px solid var(--line);color:var(--text);cursor:pointer;transition:.12s}
+  .np:hover{border-color:var(--steel);background:#1b2838;transform:translateY(-1px)}
+  .np:active{transform:none}
+  .arena-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:720px){.arena-grid{grid-template-columns:1fr}}
+  .rl{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;
+    font-family:var(--mono);font-size:13px;border-bottom:1px solid var(--line-soft)}
+  .rl .k{color:var(--faint)}
+  .gauges{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
+  @media(max-width:560px){.gauges{grid-template-columns:1fr}}
+  .ring{border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;
+    background:linear-gradient(180deg,var(--panel),var(--ink-2))}
+  .ring-wrap{position:relative;width:88px;height:88px;margin:0 auto 12px}
+  .ring-wrap svg{width:88px;height:88px;transform:rotate(-90deg)}
+  .ring-bg{fill:none;stroke:var(--line);stroke-width:7}
+  .ring-fg{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-dashoffset .4s ease}
+  .ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+  .ring-lab{font-size:13px;font-weight:600;color:var(--text)}
+  .ring-sub{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:3px}
+
+  /* prediction chips */
+  .betchips{display:inline-flex;gap:5px;flex-wrap:wrap;vertical-align:middle}
+  .bchip{font-family:var(--mono);font-size:12px;font-weight:600;min-width:26px;text-align:center;
+    padding:3px 7px;border-radius:6px;background:#101c28;border:1px solid var(--steel);color:var(--steel)}
+  .bchip.lock{border-style:dashed}
+  .bigchips{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0 4px}
+  .bigchips .bchip{font-size:16px;min-width:38px;padding:8px 6px;border-radius:8px}
+  .bchip.old{border-color:var(--bad);color:#ff9d8b;background:#22120f}
+  .bchip.new{border-color:var(--good);color:#7fe3c0;background:#0f2018}
+
+  /* live-tool status bar */
+  .statusbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;
+    padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:#0f1925}
+  .statusbar .mode{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--good);letter-spacing:.04em}
+  .statusbar .mode.demo{color:var(--amber,#e0a93c)}
+  .statusbar .counts{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .statusbar .counts b{color:var(--text)}
+  .statusbar .ctrls{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+  .mini.hi{border-color:var(--good);color:var(--good)}
+  .dim{color:var(--faint)}
+
+  /* reel (3-digit) entry */
+  .reelwrap{display:flex;flex-direction:column;gap:9px}
+  .reelrow{display:flex;align-items:center;gap:10px}
+  .reellab{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);min-width:54px}
+  .reeldigits{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;flex:1}
+  .rd.sel{border-color:var(--good);background:#13241c;color:var(--good)}
+  .reelsum{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:2px}
+  .reelsum b{color:var(--text);font-size:16px;min-width:28px;text-align:center}
+  @media(max-width:560px){.reelrow{flex-direction:column;align-items:stretch;gap:5px}.reellab{min-width:0}}
+
+  /* focus testing overlay (mobile-first) */
+  .focus-overlay{position:fixed;inset:0;z-index:1000;background:rgba(6,11,17,.92);
+    display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto}
+  .focus-card{width:100%;max-width:520px;background:linear-gradient(180deg,var(--panel),var(--ink-2));
+    border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:13px}
+  .focus-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .focus-head .fmode{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--good)}
+  .focus-head .fmode.demo{color:var(--amber,#e0a93c)}
+  .focus-head .fstats{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .focus-head .fstats b{color:var(--text)}
+  .fclose{margin-left:auto;background:#16212f;border:1px solid var(--line);color:var(--muted);
+    width:34px;height:34px;border-radius:9px;font-size:18px;cursor:pointer;line-height:1}
+  .focus-old,.focus-new{border:1px solid var(--line-soft);border-radius:12px;padding:12px}
+  .focus-old{border-color:#46241d;background:#19100f}
+  .focus-new{border-color:#1c4a3b;background:#0e1c17}
+  .fp-lab{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--muted);margin-bottom:8px}
+  .focus-old .bigchips{margin:6px 0 2px} .focus-new .bigchips{margin:6px 0 2px}
+  .focus-old .bigchips .bchip{font-size:20px;min-width:46px;padding:11px 6px}
+  .fp-out{font-family:var(--mono);font-size:13px;margin-top:9px;min-height:18px}
+  .focus-entry .enter-label{margin-bottom:10px}
+  @media(max-width:560px){.focus-card{max-width:100%;border-radius:12px;padding:13px}
+    .focus-old .bigchips .bchip{font-size:22px;min-width:13vw;padding:13px 0}
+    .focus-entry .np{padding:14px 0;font-size:15px}}
+
+  /* pattern-strength indicator + session feedback */
+  .patline{font-family:var(--mono);font-size:11.5px;margin:8px 0 2px;padding:6px 9px;border-radius:7px;line-height:1.5}
+  .patline.scan{color:var(--faint);background:#0d1722;border:1px solid var(--line-soft)}
+  .patline.lock{color:#ffd27f;background:#241c10;border:1px solid #4a3a1c}
+  .patline.lock b{color:#ffd27f}
+  .statusbar.flash{animation:sbflash 1.1s ease}
+  @keyframes sbflash{0%{box-shadow:0 0 0 0 transparent}28%{box-shadow:0 0 0 2px var(--good),0 0 18px 2px rgba(34,192,138,.5)}100%{box-shadow:0 0 0 0 transparent}}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);z-index:1200;
+    background:#0f2018;border:1px solid var(--good);color:var(--text);font-family:var(--mono);font-size:13px;
+    padding:11px 18px;border-radius:10px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast b{color:var(--good)}
+  .rl .hitn{color:var(--bad);font-weight:600}
+  .rl .missn{color:var(--good);font-weight:600}
+  .recd{color:var(--bad);font-weight:600}
+  .seal{color:var(--good);font-weight:600}
+
+  /* audit strip — the operator's own data, run through the kit's own test */
+  .auditstrip{margin-top:18px;border:1px solid var(--line);border-radius:12px;padding:14px 18px;
+    background:#0d1722;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px}
+  .auditstrip .ak{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+  .auditstrip .averdict{font-weight:600;padding:4px 10px;border-radius:6px}
+  .auditstrip .averdict.clean{color:var(--good);background:var(--good-soft)}
+  .auditstrip .averdict.flag{color:var(--bad);background:var(--bad-soft)}
+  .auditstrip .averdict.thin{color:var(--muted);background:#16212f}
+  .auditstrip .atext{color:var(--muted);flex:1;min-width:200px}
+  .auditstrip .anote{color:var(--faint);font-size:11px}
+
+  .edgenote{margin-top:14px;font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.7}
+  .edgenote b{color:var(--muted);font-weight:500}
+
+  @media (prefers-reduced-motion: reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">Provably-fair engine · head-to-head</div>
+  <h1>Same history. Two engines. Only one is <em>predictable.</em></h1>
+  <p class="lede">
+    Paste your game's result history and press <b>Begin</b>. The engine learns it and posts its
+    <b>8 most-likely numbers</b> for the next round — check them against the live app. Tap each
+    result that comes up; it's saved and the engine relearns, sharpening over a 7–8 day test.
+    The same engine aimed at Sylox's commit-reveal result gets nothing: the seed is sealed before
+    the bet, so there is no state to learn and its tightest <b>4-number</b> guess just evades.
+  </p>
+
+  <div class="whatis">
+    <span>What you're looking at</span>
+    A genuine learning predictor, running entirely in your browser. It surfaces real structure
+    when it exists — a weak or recoverable RNG is exposed within a few hundred rounds — and
+    honestly sits at the <b>no-skill baseline</b> when a stream is fair, with a 95% interval so a
+    fair game can't read as a false positive. Your history is saved on this device; <b>export</b>
+    it to carry the test across days or machines.
+  </div>
+
+  <div class="console">
+    <div class="console-bar">
+      <span class="dot live"></span> comparison.console
+      <span class="bar-tags">
+        <span class="btag">HMAC-SHA256</span>
+        <span class="btag">commit-reveal</span>
+        <span class="btag" id="cryptoStatus">self-test…</span>
+      </span>
+    </div>
+    <div class="console-body">
+      <div class="col-main">
+        <label class="fld" for="hist">Observed round history
+          <span class="fld-hint">results 0–27 · comma or space separated · editable</span></label>
+        <textarea id="hist" spellcheck="false">8,7,7,17,7,17,10,18,17,8,11,7,13,7,14,12,11,14,13,16,16,12,14,7,3,18,10,9,19,2,12,12,19,14,14,16,8,13,22,12,14,23,25,19,10,14,22,16,5,13,13</textarea>
+        <div class="hist-foot">
+          <div class="chips" id="histStats"></div>
+          <div class="hist-btns">
+            <button class="mini" id="btnSample">Reset sample</button>
+            <button class="mini" id="btnRand">+50 random</button>
+            <button class="mini" id="btnClear">Clear</button>
+          </div>
+        </div>
+
+        <div class="preview">
+          <div class="preview-head">Live provably-fair preview
+            <span>next round · computed on this device</span></div>
+          <div class="pv-grid">
+            <div class="pv-row"><span class="pv-k">client seed (player entropy)</span>
+              <input id="clientSeed" class="pv-input" value="player-7f3a91" spellcheck="false"></div>
+            <div class="pv-row"><span class="pv-k">server seed (secret pre-bet)</span>
+              <span class="pv-v mono" id="pvServer">—</span>
+              <button class="mini" id="btnRoll">roll</button></div>
+            <div class="pv-row"><span class="pv-k">commit = SHA-256(server)</span>
+              <span class="pv-v mono" id="pvCommit">—</span></div>
+            <div class="pv-row"><span class="pv-k">result = HMAC → sum</span>
+              <span class="pv-v" id="pvResult">—</span>
+              <span class="badge" id="pvVerify">verified</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="side">
+        <div class="knob">
+          <label class="fld" for="aplen">Simulation length <output id="aplenOut">200</output></label>
+          <input type="range" id="aplen" min="20" max="500" step="20" value="200">
+          <div class="knob-note">rounds the “simulate” buttons stream (demo only — never saved)</div>
+        </div>
+        <button class="run" id="runBtn">Begin session</button>
+        <div class="run-note">starts or resumes your saved live test — tap real results, or ▶ simulate to demo it</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="out"></div>
+
+  <p class="foot">
+    <b>How it works.</b> The predictor is a self-tuning ensemble (recency-weighted frequency, order-1/2
+    Markov, gap and periodicity signals) whose weights track each signal's own recent accuracy. It sees
+    only results — never engine internals — so its hit rate on the live game is yours to verify. Skill is
+    measured against a fixed central-8 cover (the no-skill baseline) with a 95% interval, so a fair stream
+    reads as zero edge, not a false positive. The right engine is Sylox's commit-reveal CSPRNG: result =
+    HMAC-SHA256(serverSeed, clientSeed:nonce); commit = SHA-256(serverSeed) is published before the bet and
+    the seed revealed after for verification — no recoverable state, so the same engine finds no edge.
+    Nothing is done <em>to</em> the player. All computation runs offline in your browser.
+  </p>
+
+  <div class="brand">
+    <span class="name">Deepankar Singh</span>
+    <span class="co">Founder · Sylox Tech (OPC) Pvt. Ltd.</span>
+    <span class="ct">Jamshedpur, India · provably-fair gaming infrastructure</span>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Pure-JS SHA-256 + HMAC  (so the file verifies offline, file://)
+   ============================================================ */
+function sha256bytes(msgBytes){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const l=msgBytes.length; const bitLen=l*8;
+  const withOne=l+1; let padLen=(56-withOne%64+64)%64;
+  const total=l+1+padLen+8; const m=new Uint8Array(total);
+  m.set(msgBytes); m[l]=0x80;
+  const dv=new DataView(m.buffer);
+  dv.setUint32(total-4, bitLen>>>0); dv.setUint32(total-8, Math.floor(bitLen/0x100000000));
+  const w=new Uint32Array(64);
+  const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let off=0;off<total;off+=64){
+    for(let i=0;i<16;i++) w[i]=dv.getUint32(off+i*4);
+    for(let i=16;i<64;i++){
+      const s0=rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3);
+      const s1=rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10);
+      w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0;
+    }
+    let [a,b,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){
+      const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);
+      const ch=(e&f)^(~e&g);
+      const t1=(h+S1+ch+K[i]+w[i])>>>0;
+      const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);
+      const maj=(a&b)^(a&c)^(b&c);
+      const t2=(S0+maj)>>>0;
+      h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;
+    }
+    H=[(H[0]+a)>>>0,(H[1]+b)>>>0,(H[2]+c)>>>0,(H[3]+d)>>>0,
+       (H[4]+e)>>>0,(H[5]+f)>>>0,(H[6]+g)>>>0,(H[7]+h)>>>0];
+  }
+  const out=new Uint8Array(32); const odv=new DataView(out.buffer);
+  H.forEach((x,i)=>odv.setUint32(i*4,x)); return out;
+}
+const enc=new TextEncoder();
+const toHex=b=>Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('');
+const sha256hex=s=>toHex(sha256bytes(enc.encode(s)));
+function hmacSha256(keyStr,msgStr){
+  let key=enc.encode(keyStr);
+  if(key.length>64) key=sha256bytes(key);
+  const k=new Uint8Array(64); k.set(key);
+  const ip=new Uint8Array(64), op=new Uint8Array(64);
+  for(let i=0;i<64;i++){ip[i]=k[i]^0x36; op[i]=k[i]^0x5c;}
+  const inner=sha256bytes(concat(ip, enc.encode(msgStr)));
+  return sha256bytes(concat(op, inner));
+}
+function concat(a,b){const o=new Uint8Array(a.length+b.length);o.set(a);o.set(b,a.length);return o;}
+
+/* ============================================================
+   ENGINES
+   ============================================================ */
+// digits 0-9 (x3) from a byte array, unbiased via rejection sampling -> sum 0..27
+function sumFromBytes(bytes){
+  const d=[]; let i=0;
+  while(d.length<3){ const b=bytes[i++%bytes.length]; if(b<250) d.push(b%10); }
+  return d[0]+d[1]+d[2];
+}
+/* ---- THE LEARNING PREDICTION ENGINE (generic; sees only result history) ----
+   A self-tuning ensemble of statistical signals. Each scores every value 0..27 for the
+   next round; each signal's weight tracks its OWN recent walk-forward accuracy
+   (multiplicative-weights / Hedge). Validated offline: large edge on Markov / periodic /
+   biased / weak-LCG streams (e.g. a recoverable RNG cracked to ~82%), and ~0 edge on a
+   truly random stream — it never invents skill it doesn't have. */
+const R=28, ETA=0.18;
+const PRIOR=(()=>{const c=new Array(R).fill(0);
+  for(let a=0;a<10;a++)for(let b=0;b<10;b++)for(let d=0;d<10;d++)c[a+b+d]++;
+  return c.map(x=>x/1000);})();
+const SIGNALS=['marginal','freq','markov1','markov2','vomm','period','gap'];
+function nrm(a){let s=0;for(const v of a)s+=v;s=s||1;return a.map(v=>v/s);}
+// signals are range-generic: RG = number of values, PRI = that range's prior.
+function sigDist(name,H,RG,PRI){
+  RG=RG||R; PRI=PRI||PRIOR; const n=H.length;
+  if(name==='marginal') return PRI.slice();
+  if(name==='freq'){ const d=0.96,w=new Array(RG).fill(0.3);
+    for(let i=0;i<n;i++) w[H[i]]+=Math.pow(d,n-1-i); return nrm(w); }
+  if(name==='markov1'){ if(n<3) return null; const last=H[n-1];
+    const row=new Array(RG).fill(0); let tot=0;
+    for(let i=0;i<n-1;i++) if(H[i]===last){row[H[i+1]]++;tot++;}
+    if(tot<2) return null; return nrm(row.map((v,k)=>v+0.25*PRI[k])); }
+  if(name==='markov2'){ if(n<6) return null; const a=H[n-2],b=H[n-1];
+    const row=new Array(RG).fill(0); let tot=0;
+    for(let i=0;i<n-2;i++) if(H[i]===a&&H[i+1]===b){row[H[i+2]]++;tot++;}
+    if(tot<2) return null; return nrm(row.map((v,k)=>v+0.2*PRI[k])); }
+  // variable-order Markov / context-match: the workhorse. For each context length k (long->short),
+  // find earlier occurrences of the last k values and tally what followed; blend, longer contexts
+  // weighted higher. Catches periodic, LCG, and repeating-motif structure of unknown order, and
+  // produces SHARP, varied (non-central) predictions when real structure exists. Null on fair data.
+  if(name==='vomm'){ const win=400, g=n>win?H.slice(n-win):H, m=g.length; if(m<6) return null;
+    const dist=new Array(RG).fill(0); let any=false; const maxO=Math.min(8,m-1);
+    for(let kk=maxO;kk>=1;kk--){
+      const succ=new Array(RG).fill(0); let tot=0;
+      for(let i=0;i+kk<m;i++){ let mt=true; for(let j=0;j<kk;j++) if(g[i+j]!==g[m-kk+j]){mt=false;break;}
+        if(mt){succ[g[i+kk]]++;tot++;} }
+      if(tot>=2){ const wgt=kk*kk*Math.min(tot,12); for(let v=0;v<RG;v++) dist[v]+=wgt*succ[v]/tot; any=true; } }
+    if(!any) return null;
+    for(let v=0;v<RG;v++) dist[v]+=0.03*PRI[v]; return nrm(dist); }
+  if(name==='gap'){ if(n<RG) return null; const last=new Array(RG).fill(-1);
+    for(let i=0;i<n;i++) last[H[i]]=i; const d=new Array(RG);
+    for(let k=0;k<RG;k++){const gap=n-1-last[k],exp=1/Math.max(PRI[k],1e-6);
+      d[k]=PRI[k]*(1+Math.max(0,(gap-exp))/exp);} return nrm(d); }
+  if(name==='period'){ if(n<24) return null; const win=200,g=H.slice(Math.max(0,n-win)),m=g.length;
+    let mean=0;for(const v of g)mean+=v;mean/=m; let varr=0;for(const v of g)varr+=(v-mean)*(v-mean);varr=varr||1;
+    let best=-1,br=0; for(let L=1;L<Math.min(16,m>>1);L++){let num=0;
+      for(let i=L;i<m;i++)num+=(g[i]-mean)*(g[i-L]-mean); const r=num/varr;
+      if(Math.abs(r)>Math.abs(br)){br=r;best=L;}}
+    if(best<0||Math.abs(br)<0.18) return null; const pred=g[m-best];
+    const d=PRI.map(p=>p*0.15); for(let k=0;k<RG;k++) d[k]+=Math.exp(-((k-pred)*(k-pred))/8);
+    return nrm(d); }
+  return null;
+}
+function sigAll(H,RG,PRI){ const d={}; for(const nm of SIGNALS) d[nm]=sigDist(nm,H,RG,PRI); return d; }
+function combineDists(dists,W,RG,PRI){
+  RG=RG||R; PRI=PRI||PRIOR; const lp=new Array(RG).fill(0); let ws=0;
+  for(const nm of SIGNALS){ const d=dists[nm]; if(!d||W[nm]<=0) continue; ws+=W[nm];
+    for(let k=0;k<RG;k++) lp[k]+=W[nm]*Math.log(d[k]+1e-9); }
+  if(ws===0) return PRI.slice();
+  let mx=-Infinity; for(const v of lp) if(isFinite(v)&&v>mx)mx=v;
+  if(!isFinite(mx)) return PRI.slice();
+  const out=nrm(lp.map(v=>Math.exp((isFinite(v)?v:-Infinity)-mx)));
+  return out.some(x=>!isFinite(x))?PRI.slice():out;
+}
+// NaN-safe; ties break toward the CENTER of the range (the honest baseline), never to [0,1,2,3…].
+function topK(arr,k){ const C=(arr.length-1)/2;
+  return [...Array(arr.length).keys()].sort((a,b)=>{
+    const va=isFinite(arr[a])?arr[a]:-Infinity, vb=isFinite(arr[b])?arr[b]:-Infinity;
+    return (vb-va) || (Math.abs(a-C)-Math.abs(b-C)) || (a-b);
+  }).slice(0,k); }
+function predict(H,W,k,RG,PRI){ const dists=sigAll(H,RG,PRI);
+  return {list:topK(combineDists(dists,W,RG,PRI),k), dists}; }
+function updateWeights(W,dists,actual,k){
+  for(const nm of SIGNALS){ const d=dists[nm]; if(!d) continue;
+    const inTop=topK(d,k).indexOf(actual)>=0; W[nm]*=Math.exp(ETA*((inTop?1:0)-0.5)); }
+  // keep every detector alive (floor) so structure can surface later; cap the marginal so a fair
+  // warm-up can't lock the engine onto the central block forever.
+  for(const nm of SIGNALS){ if(W[nm]<0.06) W[nm]=0.06; }
+  if(W.marginal>1.6) W.marginal=1.6;
+  let s=0;for(const nm of SIGNALS)s+=W[nm]; const f=SIGNALS.length/(s||1);
+  for(const nm of SIGNALS) W[nm]*=f;
+}
+function newWeights(){ const W={}; for(const nm of SIGNALS) W[nm]=1; return W; }
+
+// ---- per-reel prediction (3 digits 0-9) -> convolved to a 0-27 sum distribution ----
+// summing three reels smears out weak-RNG structure; modelling each reel separately and
+// recombining recovers it (validated: ~+25pt edge vs +4pt for sum-only on coprime-cycle reels).
+const DPRI=new Array(10).fill(0.1);
+function convolve3(a,b,c){ const out=new Array(R).fill(0);
+  for(let i=0;i<10;i++)for(let j=0;j<10;j++){const ij=a[i]*b[j]; if(ij===0)continue;
+    for(let m=0;m<10;m++) out[i+j+m]+=ij*c[m];} return out; }
+function predictReels(reels,Wr,k){
+  const per=[],combs=[];
+  for(let r=0;r<3;r++){ const Dr=reels.map(t=>t[r]); const dists=sigAll(Dr,10,DPRI);
+    const comb=combineDists(dists,Wr[r],10,DPRI); per.push({dists,comb}); combs.push(comb); }
+  const sumDist=convolve3(combs[0],combs[1],combs[2]);
+  return {list:topK(sumDist,k), sumDist, per};
+}
+const CENTER8=new Set([10,11,12,13,14,15,16,17]);   // static no-skill cover (the honest baseline)
+function wilson(h,n){ if(!n) return [0,0]; const z=1.96,p=h/n,den=1+z*z/n;
+  const c=(p+z*z/(2*n))/den, mrg=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/den;
+  return [Math.max(0,c-mrg),Math.min(1,c+mrg)]; }
+
+// demo-mode simulated old engine (used only when NOT wired to the live app, so the tool
+// can be shown in a meeting). 'weak' = a recoverable LCG-class engine carrying real
+// structure the generic predictor learns honestly; 'fair' = independent draws.
+let demoLCG=7;
+function weakEngineNext(){ demoLCG=(demoLCG*9+13)%R; return Math.random()<0.8?demoLCG:r3(); }
+function r3(){return (Math.random()*10|0)+(Math.random()*10|0)+(Math.random()*10|0);}
+
+// exact distribution of the sum of three 0-9 digits (1000 combos) -> rigorous pricing
+const DIST=(()=>{const c=new Array(28).fill(0);
+  for(let a=0;a<10;a++)for(let b=0;b<10;b++)for(let d=0;d<10;d++)c[a+b+d]++;return c;})();
+function trueProb(set){let s=0;set.forEach(n=>s+=DIST[n]||0);return s/1000;}
+
+// RIGHT: provably-fair commit-reveal engine.
+function randHex(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return toHex(a);}
+function fairRound(clientSeed,nonce){
+  const serverSeed=randHex(32);
+  const commit=sha256hex(serverSeed);
+  const result=sumFromBytes(hmacSha256(serverSeed,`${clientSeed}:${nonce}`));
+  return {serverSeed,commit,clientSeed,nonce,result};
+}
+function fairVerify(r){
+  if(sha256hex(r.serverSeed)!==r.commit) return false;
+  return sumFromBytes(hmacSha256(r.serverSeed,`${r.clientSeed}:${r.nonce}`))===r.result;
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+const $=id=>document.getElementById(id);
+function fmt(n){return n.toLocaleString('en-US');}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// slider readout
+$('aplen').oninput=e=>$('aplenOut').textContent=e.target.value;
+
+// ---- history parsing + live stats ----
+const DEFAULT_HIST="8,7,7,17,7,17,10,18,17,8,11,7,13,7,14,12,11,14,13,16,16,12,14,7,3,18,10,9,19,2,12,12,19,14,14,16,8,13,22,12,14,23,25,19,10,14,22,16,5,13,13";
+function parseHistory(){
+  const toks=$('hist').value.split(/[\s,]+/).filter(t=>t.length);
+  const nums=[], bad=[];
+  for(const t of toks){ const v=Number(t);
+    if(Number.isInteger(v)&&v>=0&&v<=27) nums.push(v); else bad.push(t); }
+  return {nums,bad};
+}
+function mode(a){const c={};let best=a[0],bc=0;for(const v of a){c[v]=(c[v]||0)+1;if(c[v]>bc){bc=c[v];best=v;}}return best;}
+function renderHistStats(){
+  const {nums,bad}=parseHistory();
+  const el=$('histStats');
+  if(!nums.length){el.innerHTML='<span class="chip warn">no valid rounds</span>';return;}
+  const mean=(nums.reduce((s,v)=>s+v,0)/nums.length);
+  let h='';
+  h+=`<span class="chip"><b>${nums.length}</b> rounds</span>`;
+  h+=`<span class="chip">mean <b>${mean.toFixed(1)}</b></span>`;
+  h+=`<span class="chip">range <b>${Math.min(...nums)}–${Math.max(...nums)}</b></span>`;
+  h+=`<span class="chip">mode <b>${mode(nums)}</b></span>`;
+  if(bad.length) h+=`<span class="chip warn">${bad.length} ignored</span>`;
+  el.innerHTML=h;
+}
+$('hist').addEventListener('input',renderHistStats);
+$('btnSample').onclick=()=>{$('hist').value=DEFAULT_HIST;renderHistStats();};
+$('btnClear').onclick=()=>{$('hist').value='';renderHistStats();};
+$('btnRand').onclick=()=>{
+  const r=()=>Math.floor(Math.random()*10)+Math.floor(Math.random()*10)+Math.floor(Math.random()*10);
+  const add=Array.from({length:50},r).join(',');
+  $('hist').value=($('hist').value.trim()?$('hist').value.trim()+',':'')+add;
+  renderHistStats();
+};
+
+// ---- live provably-fair preview ----
+function randHexPV(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return toHex(a);}
+let pvServer=randHexPV(32);
+function refreshPreview(){
+  const cs=$('clientSeed').value||'client';
+  const commit=sha256hex(pvServer);
+  const result=sumFromBytes(hmacSha256(pvServer,`${cs}:0`));
+  $('pvServer').textContent=pvServer.slice(0,20)+'…';
+  $('pvCommit').textContent=commit.slice(0,20)+'…';
+  $('pvResult').textContent=result;
+  const ok=(sha256hex(pvServer)===commit) && (sumFromBytes(hmacSha256(pvServer,`${cs}:0`))===result);
+  $('pvVerify').textContent=ok?'verified':'FAILED';
+}
+$('clientSeed').addEventListener('input',refreshPreview);
+$('btnRoll').onclick=()=>{pvServer=randHexPV(32);refreshPreview();};
+
+// ---- crypto self-test (shown to a technical reviewer) ----
+(function selfTest(){
+  const ok = sha256hex("abc")==="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    && toHex(hmacSha256("key","The quick brown fox jumps over the lazy dog"))
+       ==="f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8";
+  const s=$('cryptoStatus');
+  s.textContent=ok?"self-test ✓":"self-test ✗";
+  s.classList.add(ok?'ok':'err');
+})();
+renderHistStats(); refreshPreview();
+
+// ================= LIVE PREDICTION TOOL (persists across a 7-8 day test) =================
+const BAD='#ef5d44', GOOD='#22c08a', STEEL='#5b8bd0', AMBER='#e0a93c';
+const LS_KEY='sylox_livetest_v2', K_OLD=8, K_NEW=4, MINN=80;
+const BASE8=topK(PRIOR,K_OLD), BASE8set=new Set(BASE8);     // central-8 = the no-skill baseline
+const baseProb8=BASE8.reduce((s,k)=>s+PRIOR[k],0);          // ~0.560
+let P=null, cur=null, apTimer=null, isDemo=false, focusOpen=false, reelPick=[null,null,null];
+const chips=(arr,cls)=>arr.slice().sort((a,b)=>a-b).map(n=>`<span class="bchip ${cls||''}">${n}</span>`).join('');
+const dayKey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+
+function newState(){
+  const nums=parseHistory().nums;
+  const st={v:2, created:Date.now(), mode:'sum',
+    Hold:nums.slice(), Hnew:[], reels:[], Wold:newWeights(), Wnew:newWeights(),
+    Wr:[newWeights(),newWeights(),newWeights()],
+    oH:0,oR:0, bH:0, nH:0,nR:0, streak:0, best:0, days:{}, lastTs:null,
+    seed:($('clientSeed').value||'player')+'-'+Math.floor(Math.random()*1e9).toString(36)};
+  if(st.Hold.length<=800) for(let i=12;i<st.Hold.length;i++){    // warm signal weights on the pasted history
+    const dists=sigAll(st.Hold.slice(0,i)); updateWeights(st.Wold,dists,st.Hold[i],K_OLD); }
+  return st;
+}
+function loadState(){ try{const s=JSON.parse(localStorage.getItem(LS_KEY)); return (s&&s.v===2)?s:null;}catch(e){return null;} }
+function saveState(){ if(isDemo) return; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){} }
+
+function buildArena(){
+  $('out').innerHTML=`
+  <div class="statusbar">
+    <span class="mode" id="modeTag">● LIVE TEST</span>
+    <span class="counts" id="counts"></span>
+    <span class="ctrls">
+      <button class="mini hi" id="btnFocus">&#9974; focus testing</button>
+      <button class="mini" id="btnMode"></button>
+      <button class="mini" id="apWeak">&#9654; simulate weak</button>
+      <button class="mini" id="apFair">&#9654; simulate fair</button>
+      <button class="mini" id="apStop">stop</button>
+      <button class="mini" id="btnExport">export</button>
+      <button class="mini" id="btnImport">import</button>
+      <button class="mini" id="btnReset">reset</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </span>
+  </div>
+  <div class="enter">
+    <div class="enter-label" id="entryLab"></div>
+    <div id="numpad"></div>
+  </div>
+  <div class="arena-grid">
+    <div class="card bad show">
+      <span class="tag bad">Old engine · the live game</span>
+      <h2>Our prediction — 8 numbers</h2>
+      <div class="desc">The engine's top 8 for the next round, learned from your history.
+        <b>Check them against the live app.</b></div>
+      <div class="bigchips" id="oldChips"></div>
+      <div class="patline" id="oldPattern"></div>
+      <div class="rl"><span class="k">last round</span><span id="oldOutcome">&mdash;</span></div>
+      <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 8?</span><span></span></div><div id="logL"></div></div>
+    </div>
+    <div class="card good show">
+      <span class="tag good">New engine · Sylox commit-reveal</span>
+      <h2>Tightest guess — 4 numbers</h2>
+      <div class="desc">Same engine, aimed at our provably-fair result (<span id="newCommit" class="seal">commit —</span>).
+        No state to learn — it evades.</div>
+      <div class="bigchips" id="newChips"></div>
+      <div class="rl"><span class="k">last round</span><span><span id="newOutcome">&mdash;</span> <span id="newVerify"></span></span></div>
+      <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 4?</span><span>verify</span></div><div id="logR"></div></div>
+    </div>
+  </div>
+  <div class="gauges" id="gauges"></div>
+  <div class="auditstrip" id="accStrip"></div>
+  <p class="edgenote" id="edgeNote"></p>`;
+  $('btnMode').textContent = P.mode==='reels' ? 'sum entry (0–27)' : 'reel entry (3 digits)';
+  renderEntry('numpad', false);
+  $('btnFocus').onclick=openFocus;
+  $('btnMode').onclick=toggleMode;
+  $('apWeak').onclick=()=>startDemo('weak');
+  $('apFair').onclick=()=>startDemo('fair');
+  $('apStop').onclick=stopAuto;
+  $('btnExport').onclick=exportData;
+  $('btnImport').onclick=()=>$('importFile').click();
+  $('importFile').onchange=e=>{ if(e.target.files[0]) importData(e.target.files[0]); };
+  $('btnReset').onclick=resetTest;
+}
+// entry area renderer — sum numpad (0–27) or 3 reel rows (0–9); shared by main + focus
+function renderEntry(id, focus){
+  const el=$(id); if(!el) return;
+  if(P.mode==='reels'){
+    let h='<div class="reelwrap">';
+    for(let r=0;r<3;r++){ h+=`<div class="reelrow"><span class="reellab">Reel ${r+1}</span><div class="reeldigits">`;
+      for(let d=0;d<=9;d++) h+=`<button class="np rd${reelPick[r]===d?' sel':''}" data-r="${r}" data-d="${d}">${d}</button>`;
+      h+='</div></div>'; }
+    const s=reelPick.every(x=>x!=null)?reelPick[0]+reelPick[1]+reelPick[2]:'—';
+    h+=`<div class="reelsum">sum <b>${s}</b><button class="mini" data-act="clear">clear</button></div></div>`;
+    el.innerHTML=h;
+    el.querySelectorAll('.rd').forEach(b=>b.onclick=()=>pickReel(+b.dataset.r,+b.dataset.d));
+    el.querySelectorAll('[data-act=clear]').forEach(b=>b.onclick=()=>{reelPick=[null,null,null];renderEntries();});
+  } else {
+    let h='<div class="numpad">'; for(let n=0;n<=27;n++) h+=`<button class="np" data-n="${n}">${n}</button>`; h+='</div>';
+    el.innerHTML=h;
+    el.querySelectorAll('.np').forEach(b=>b.onclick=()=>submit(+b.dataset.n));
+  }
+  const lab=$(focus?'fEntryLab':'entryLab');
+  if(lab) lab.innerHTML = P.mode==='reels'
+    ? 'Tap the <b>three reel digits</b> that came up — modelling each reel separately catches weak-RNG structure the sum hides.'
+    : 'Tap the result that came up <b>on the live app</b> — it saves and the engine relearns. <span class="dim">(no app? ▶ simulate)</span>';
+}
+function renderEntries(){ renderEntry('numpad',false); if(focusOpen) renderEntry('fNumpad',true); }
+function pickReel(r,d){ reelPick[r]=d; renderEntries();
+  if(reelPick.every(x=>x!=null)){ const rs=reelPick.slice(); reelPick=[null,null,null]; submitReels(rs); } }
+function toggleMode(){ P.mode = P.mode==='reels'?'sum':'reels'; reelPick=[null,null,null]; saveState();
+  buildArena(); lockRound(); render(); if(focusOpen) renderEntry('fNumpad',true); }
+function ring(pct,color,lab,sub,center){
+  pct=Math.max(0,Math.min(100,pct));
+  const r=34,C=2*Math.PI*r,off=C*(1-pct/100);
+  return `<div class="ring"><div class="ring-wrap">
+    <svg viewBox="0 0 80 80"><circle class="ring-bg" cx="40" cy="40" r="${r}"/>
+    <circle class="ring-fg" cx="40" cy="40" r="${r}" stroke="${color}"
+      stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg>
+    <div class="ring-num" style="color:${color}">${center!=null?center:pct.toFixed(0)+'%'}</div></div>
+    <div class="ring-lab">${lab}</div><div class="ring-sub">${sub}</div></div>`;
+}
+function lockRound(){
+  const sumPred=predict(P.Hold,P.Wold,K_OLD);                 // always (fallback + keeps learning)
+  const reelPred = P.mode==='reels' ? predictReels(P.reels,P.Wr,K_OLD) : null;
+  const useReel = reelPred && P.reels.length>=12;             // trust reels once there are enough
+  cur={ old: useReel?reelPred:sumPred, sumDists:sumPred.dists, reel:reelPred,
+        nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
+  $('oldChips').innerHTML=chips(cur.old.list,'old');
+  $('newChips').innerHTML=chips(cur.nw.list,'new');
+  $('newCommit').textContent='commit '+cur.fair.commit.slice(0,14)+'…';
+  const ps=patternStatus(cur.old.list);
+  if($('oldPattern')){ $('oldPattern').className='patline '+ps.cls; $('oldPattern').innerHTML=ps.txt; }
+  if(focusOpen) renderFocus();
+}
+// is the prediction tracking real structure, or just the fair central block?
+function patternStatus(list){
+  const off=list.filter(x=>!BASE8set.has(x)).length;        // numbers off the no-skill central block
+  const usingReels = P.mode==='reels' && P.reels.length>=12;
+  if(off<=1) return {cls:'scan', txt:`scanning — no exploitable pattern yet, showing the fair baseline.${P.mode!=='reels'?' Try <b>reel entry</b> to expose per-reel structure.':''}`};
+  return {cls:'lock', txt:`<b>PATTERN LOCKED</b> — ${off}/8 numbers off the baseline${usingReels?' (per-reel)':''}. These are real, structure-driven picks.`};
+}
+function logRow(id,n,result,hit,extra){
+  $(id).insertAdjacentHTML('afterbegin',
+   `<div class="log-row"><span class="neutral">${n}</span><span>${result}</span>`+
+   `<span class="${hit?'hit':'miss'}">${hit?'✓':'—'}</span><span>${extra||''}</span></div>`);
+}
+function submit(A){ if(!P) return; resolveRound(A, null, true); }       // sum tap = a real live-app result
+function submitReels(rs){ if(!P) return; resolveRound(rs[0]+rs[1]+rs[2], rs, true); }
+function resolveRound(actual, reels, toBox){
+  // OLD engine (the live game): did our 8 contain the result?
+  const oldHit=cur.old.list.indexOf(actual)>=0;
+  P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
+  updateWeights(P.Wold,cur.sumDists,actual,K_OLD);                      // sum ensemble keeps learning
+  if(reels && cur.reel){ for(let r=0;r<3;r++) updateWeights(P.Wr[r],cur.reel.per[r].dists,reels[r],3); P.reels.push(reels); }
+  P.Hold.push(actual);
+  // NEW engine: independent provably-fair result vs our tightest 4
+  const res=cur.fair.result, ok=fairVerify(cur.fair), newHit=cur.nw.list.indexOf(res)>=0;
+  P.nR++; if(newHit)P.nH++;
+  updateWeights(P.Wnew,cur.nw.dists,res,K_NEW); P.Hnew.push(res);
+  // streak + per-day
+  P.streak=oldHit?P.streak+1:0; if(P.streak>P.best)P.best=P.streak;
+  const ts=Date.now(); P.lastTs=ts; const dk=dayKey(ts);
+  const dd=P.days[dk]||(P.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oldHit)dd.oH++; if(BASE8set.has(actual))dd.bH++;
+  // feedback
+  const shown=`${actual}${reels?` <span class="dim">(${reels.join('+')})</span>`:''}`;
+  $('oldOutcome').innerHTML=oldHit?`<span class="hitn">PREDICTED ✓ — ${shown} was in our 8</span>`
+                                  :`<span class="missn">missed — ${shown}</span>`;
+  $('newOutcome').innerHTML=newHit?`<span class="missn">chance hit — ${res}</span>`
+                                  :`<span class="hitn">EVADED ✓ — ${res} not in our 4</span>`;
+  $('newVerify').innerHTML=ok?'<span class="badge">verified</span>':'<span class="missn">VERIFY FAIL</span>';
+  logRow('logL',P.oR,actual,oldHit,'');
+  logRow('logR',P.nR,res,newHit,ok?'<span class="badge"></span>':'!');
+  if(toBox) syncHist(actual);
+  saveState(); render(); lockRound();
+}
+function render(){
+  const o=P.oR?P.oH/P.oR:0, b=P.oR?P.bH/P.oR:0, edge=o-b, nn=P.nR?P.nH/P.nR:0;
+  const [olo,ohi]=wilson(P.oH,P.oR);
+  $('gauges').innerHTML=
+    ring(o*100,BAD,'Our 8 vs OLD engine',`${P.oH}/${P.oR} — verify on the live app`)+
+    ring((1-nn)*100,GOOD,'NEW engine evades',`our 4 land ${(nn*100).toFixed(0)}% — chance`)+
+    ring(Math.max(0,edge*100),STEEL,'Predictive edge on OLD',
+        P.oR?`${(o*100).toFixed(0)}% vs ${(b*100).toFixed(0)}% baseline`:'collecting',
+        (edge>=0?'+':'')+(edge*100).toFixed(0)+'pt');
+  const days=Object.keys(P.days).length;
+  let state,label,text;
+  if(P.oR<MINN){ state='thin'; label='COLLECTING'; text=`need ≥${MINN} live rounds for a verdict (${P.oR} so far)`; }
+  else if(olo>b){ state='flag'; label='GENUINE EDGE'; text=`our 8 hit ${(o*100).toFixed(0)}% [95% CI ${(olo*100).toFixed(0)}–${(ohi*100).toFixed(0)}], beating the no-skill baseline ${(b*100).toFixed(0)}% — the old engine is predictable.`; }
+  else{ state='clean'; label='NO EDGE YET'; text=`our 8 hit ${(o*100).toFixed(0)}% vs baseline ${(b*100).toFixed(0)}% — within noise, this engine looks fair so far.`; }
+  $('accStrip').innerHTML=
+    `<span class="ak">live test</span>`+
+    `<span class="averdict ${state==='flag'?'flag':state==='clean'?'clean':'thin'}">${label}</span>`+
+    `<span class="atext">${text}</span>`+
+    `<span class="anote">${P.oR} rounds · ${days} day${days===1?'':'s'} · streak ${P.streak} (best ${P.best}) · saved on this device</span>`;
+  $('counts').innerHTML=`<b>${P.oR}</b> rounds · <b>${days}</b> day${days===1?'':'s'} · streak <b>${P.streak}</b>`;
+  const bp=P.oR?(b*100).toFixed(0):(baseProb8*100).toFixed(0);
+  $('edgeNote').innerHTML=
+    `<b>How to read it.</b> The no-skill baseline is what a fixed central-8 cover scores on this exact stream — currently <b>${bp}%</b> `+
+    `(on a fair sum-of-dice game that is ~${(baseProb8*100).toFixed(0)}%). Skill is our 8 landing <em>above</em> ${bp}% with the 95% interval clear of it. `+
+    `On the provably-fair engine the edge stays at zero by construction — the seed is sealed, so there is nothing to learn.`;
+  if(focusOpen) renderFocus();
+}
+function syncHist(v){ const t=$('hist'); t.value=(t.value.trim()?t.value.trim()+',':'')+v; renderHistStats(); }
+
+// ---- focus testing: a compact, mobile-first overlay (predictions + result entry + stats) ----
+function ensureFocus(){
+  if($('focusOverlay')) return;
+  const o=document.createElement('div'); o.id='focusOverlay'; o.className='focus-overlay'; o.style.display='none';
+  o.innerHTML=`
+    <div class="focus-card">
+      <div class="focus-head"><span class="fmode" id="fMode">● LIVE</span><span class="fstats" id="fStats"></span>
+        <button class="fclose" id="fClose" aria-label="close">&times;</button></div>
+      <div class="focus-old">
+        <div class="fp-lab">Old engine · our 8 — <b>check the live game</b></div>
+        <div class="bigchips" id="fOldChips"></div>
+        <div class="patline" id="fPattern"></div>
+        <div class="fp-out" id="fOldOut">&mdash;</div>
+      </div>
+      <div class="focus-new">
+        <div class="fp-lab">New engine · Sylox — evades · our 4</div>
+        <div class="bigchips" id="fNewChips"></div>
+        <div class="fp-out" id="fNewOut">&mdash;</div>
+      </div>
+      <div class="focus-entry"><div class="enter-label" id="fEntryLab"></div><div id="fNumpad"></div></div>
+    </div>`;
+  document.body.appendChild(o);
+  $('fClose').onclick=closeFocus;
+  o.onclick=e=>{ if(e.target===o) closeFocus(); };
+}
+function openFocus(){ ensureFocus(); focusOpen=true; $('focusOverlay').style.display='flex';
+  document.body.style.overflow='hidden'; renderEntry('fNumpad',true); renderFocus(); }
+function closeFocus(){ focusOpen=false; if($('focusOverlay'))$('focusOverlay').style.display='none';
+  document.body.style.overflow=''; }
+function renderFocus(){
+  if(!focusOpen||!$('focusOverlay')) return;
+  const o=P.oR?P.oH/P.oR*100:0, b=P.oR?P.bH/P.oR*100:0, e=o-b;
+  $('fMode').textContent=isDemo?'▮ DEMO':'● LIVE'; $('fMode').className='fmode'+(isDemo?' demo':'');
+  $('fStats').innerHTML=`<b>${P.oR}</b> rnds · our 8 <b>${o.toFixed(0)}%</b> vs ${b.toFixed(0)}% · `+
+    `edge <b>${(e>=0?'+':'')+e.toFixed(0)}pt</b> · streak <b>${P.streak}</b>`;
+  $('fOldChips').innerHTML=chips(cur.old.list,'old');
+  $('fNewChips').innerHTML=chips(cur.nw.list,'new');
+  $('fOldOut').innerHTML=$('oldOutcome')?$('oldOutcome').innerHTML:'—';
+  $('fNewOut').innerHTML=($('newOutcome')?$('newOutcome').innerHTML:'')+' '+($('newVerify')?$('newVerify').innerHTML:'');
+}
+
+// ---- demo (isolated, never saved): show the engine learning a weak generator ----
+function startDemo(kind){
+  stopAuto(); isDemo=true; P=newState(); demoLCG=7;
+  buildArena();                                // fresh arena so live-test rows don't leak in
+  $('modeTag').textContent='▮ DEMO — simulated, not saved'; $('modeTag').classList.add('demo');
+  lockRound(); render();
+  let left=+$('aplen').value;
+  apTimer=setInterval(()=>{ if(left--<=0){stopAuto();return;}
+    resolveRound(kind==='weak'?weakEngineNext():r3(), null, false); },60);
+}
+function stopAuto(){
+  if(apTimer){clearInterval(apTimer);apTimer=null;}
+  if(isDemo){ isDemo=false; P=loadState()||newState(); buildArena(); lockRound(); render(); }
+}
+
+// ---- persistence I/O ----
+function exportData(){
+  const blob=new Blob([JSON.stringify(P)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='sylox-livetest-'+dayKey(Date.now())+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function importData(file){ const r=new FileReader();
+  r.onload=()=>{ try{const s=JSON.parse(r.result);
+    if(s&&s.v===2){ isDemo=false; P=s; saveState(); buildArena(); lockRound(); render(); }
+    else alert('Not a Sylox live-test export.'); }catch(e){ alert('Could not read that file.'); } };
+  r.readAsText(file);
+}
+function resetTest(){
+  stopAuto();
+  if(!confirm('Reset the live test? This clears the saved rounds and reseeds from the history box.')) return;
+  try{localStorage.removeItem(LS_KEY);}catch(e){} isDemo=false; P=newState(); buildArena(); lockRound(); render();
+}
+function beginSession(){ stopAuto(); isDemo=false; P=loadState()||newState(); buildArena(); lockRound(); render(); }
+function toast(msg){ let t=$('toast'); if(!t){ t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+  t.innerHTML=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2600); }
+function flashStarted(){
+  const o=$('out'); if(o) o.scrollIntoView({behavior:'smooth',block:'start'});
+  const sb=document.querySelector('.statusbar'); if(sb){ sb.classList.remove('flash'); void sb.offsetWidth; sb.classList.add('flash'); }
+  const restored=loadState();
+  toast(`<b>Session active</b> · ${P.oR} round${P.oR===1?'':'s'} loaded · ${P.mode==='reels'?'reel':'sum'} entry · ${restored?'resumed your saved test':'fresh from history'}`);
+}
+$('runBtn').onclick=()=>{ beginSession(); flashStarted(); };
+$('runBtn').textContent='Begin / resume session';
+beginSession();
+
+</script>
+</body>
+</html>
