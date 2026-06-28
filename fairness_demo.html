@@ -270,25 +270,37 @@
   .focus-overlay{position:fixed;inset:0;z-index:1000;background:rgba(6,11,17,.92);
     display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto}
   .focus-card{width:100%;max-width:520px;background:linear-gradient(180deg,var(--panel),var(--ink-2));
-    border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:13px}
-  .focus-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;
+    max-height:100dvh;overflow:auto}
+  .focus-head{position:relative;display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;padding-right:38px;min-height:30px}
   .focus-head .fmode{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--good)}
   .focus-head .fmode.demo{color:var(--amber,#e0a93c)}
-  .focus-head .fstats{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .focus-head .fstats{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:0}
   .focus-head .fstats b{color:var(--text)}
-  .fclose{margin-left:auto;background:#16212f;border:1px solid var(--line);color:var(--muted);
-    width:34px;height:34px;border-radius:9px;font-size:18px;cursor:pointer;line-height:1}
+  .fclose{position:absolute;top:0;right:0;background:#16212f;border:1px solid var(--line);color:var(--muted);
+    width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;line-height:1;
+    display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+  @media(max-width:560px){.focus-head{padding-right:34px}
+    .focus-head .fstats{font-size:11px} .fclose{width:27px;height:27px;font-size:15px}}
   .focus-old,.focus-new{border:1px solid var(--line-soft);border-radius:12px;padding:12px}
   .focus-old{border-color:#46241d;background:#19100f}
   .focus-new{border-color:#1c4a3b;background:#0e1c17}
   .fp-lab{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--muted);margin-bottom:8px}
-  .focus-old .bigchips{margin:6px 0 2px} .focus-new .bigchips{margin:6px 0 2px}
-  .focus-old .bigchips .bchip{font-size:20px;min-width:46px;padding:11px 6px}
-  .fp-out{font-family:var(--mono);font-size:13px;margin-top:9px;min-height:18px}
-  .focus-entry .enter-label{margin-bottom:10px}
-  @media(max-width:560px){.focus-card{max-width:100%;border-radius:12px;padding:13px}
-    .focus-old .bigchips .bchip{font-size:22px;min-width:13vw;padding:13px 0}
-    .focus-entry .np{padding:14px 0;font-size:15px}}
+  .focus-old,.focus-new{padding:10px}
+  .focus-old .bigchips{margin:5px 0 2px} .focus-new .bigchips{margin:5px 0 2px}
+  .focus-old .bigchips .bchip{font-size:17px;min-width:40px;padding:8px 5px}
+  .focus-new .bigchips .bchip{font-size:16px;min-width:40px;padding:7px 5px}
+  .focus-old .patline{font-size:10px;padding:5px 8px;margin:5px 0 2px;line-height:1.45}
+  .focus-old .fp-lab,.focus-new .fp-lab{margin-bottom:5px}
+  .fp-out{font-family:var(--mono);font-size:12px;margin-top:6px;min-height:14px}
+  .focus-entry .enter-label{margin-bottom:7px;font-size:10.5px}
+  .focus-entry .np{padding:9px 0;font-size:14px}
+  @media(max-width:560px){
+    .focus-overlay{padding:7px}
+    .focus-card{max-width:100%;border-radius:12px;padding:11px;gap:8px}
+    .focus-old .bigchips .bchip{font-size:18px;min-width:9.6vw;padding:9px 0}
+    .focus-new .bigchips .bchip{font-size:17px;min-width:11vw;padding:8px 0}
+    .focus-entry .np{padding:10px 0}}
 
   /* pattern-strength indicator + session feedback */
   .patline{font-family:var(--mono);font-size:11.5px;margin:8px 0 2px;padding:6px 9px;border-radius:7px;line-height:1.5}
@@ -819,9 +831,11 @@ function renderEntry(id, focus){
     el.querySelectorAll('.np').forEach(b=>b.onclick=()=>submit(+b.dataset.n));
   }
   const lab=$(focus?'fEntryLab':'entryLab');
-  if(lab) lab.innerHTML = P.mode==='reels'
-    ? 'Tap the <b>three reel digits</b> that came up — modelling each reel separately catches weak-RNG structure the sum hides.'
-    : 'Tap the result that came up <b>on the live app</b> — it saves and the engine relearns. <span class="dim">(no app? ▶ simulate)</span>';
+  if(lab){ lab.innerHTML = focus
+    ? (P.mode==='reels' ? 'Tap the <b>3 reel digits</b> that came up' : 'Tap the result that came up')
+    : (P.mode==='reels'
+      ? 'Tap the <b>three reel digits</b> that came up — modelling each reel separately catches weak-RNG structure the sum hides.'
+      : 'Tap the result that came up <b>on the live app</b> — it saves and the engine relearns. <span class="dim">(no app? ▶ simulate)</span>'); }
 }
 function renderEntries(){ renderEntry('numpad',false); if(focusOpen) renderEntry('fNumpad',true); }
 function pickReel(r,d){ reelPick[r]=d; renderEntries();
