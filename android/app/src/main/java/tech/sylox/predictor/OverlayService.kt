@@ -17,6 +17,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -40,10 +41,18 @@ class OverlayService : Service() {
         const val OVERLAY_URL =
             "https://deepankar1993.github.io/Test-Prediction-engine-show/overlay.html?app=1"
 
+        // Persisted flag so UpdateReceiver knows whether to re-open the overlay after an update.
+        const val PREFS = "sylox"
+        const val KEY_RUNNING = "overlay_running"
+
         // FileActivity (import) hands the picked JSON back to the live overlay here.
         @Volatile
         var live: OverlayService? = null
         fun inject(json: String) { live?.injectImport(json) }
+    }
+
+    private fun setRunning(v: Boolean) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_RUNNING, v).apply()
     }
 
     private lateinit var wm: WindowManager
@@ -59,6 +68,7 @@ class OverlayService : Service() {
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         addOverlay()
         live = this
+        setRunning(true)   // an update that kills us while this is true → UpdateReceiver re-opens
     }
 
     private fun dp(v: Int): Int = TypedValue.applyDimension(
@@ -105,7 +115,7 @@ class OverlayService : Service() {
             minimumWidth = dp(30)
             minimumHeight = dp(28)
             setPadding(0, 0, 0, 0)
-            setOnClickListener { stopSelf() }
+            setOnClickListener { setRunning(false); stopSelf() }   // explicit close → don't auto-reopen
         })
         handle.setOnTouchListener(object : View.OnTouchListener {
             var ix = 0; var iy = 0; var rx = 0f; var ry = 0f
@@ -155,6 +165,31 @@ class OverlayService : Service() {
         }
     }
 
+    /**
+     * Make the floating window focusable (so the soft keyboard can attach) while the user types
+     * the sync code, then restore the normal not-focusable, touch-pass-through state. Without
+     * clearing FLAG_NOT_FOCUSABLE the IME never appears for the WebView's input fields.
+     */
+    fun setImeFocus(focus: Boolean) {
+        Handler(mainLooper).post {
+            val r = root ?: return@post
+            lp.flags = if (focus)
+                lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            else
+                lp.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            try { wm.updateViewLayout(r, lp) } catch (_: Exception) {}
+            val w = web ?: return@post
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            if (focus) {
+                w.requestFocus()
+                // fire after the web side focuses the <input> (~60ms) so the IME has a target
+                Handler(mainLooper).postDelayed({ imm.showSoftInput(w, InputMethodManager.SHOW_IMPLICIT) }, 150)
+            } else {
+                imm.hideSoftInputFromWindow(w.windowToken, 0)
+            }
+        }
+    }
+
     /** Called from overlay.html JS. */
     inner class Bridge {
         @JavascriptInterface
@@ -170,7 +205,13 @@ class OverlayService : Service() {
         }
 
         @JavascriptInterface
-        fun close() { Handler(mainLooper).post { stopSelf() } }
+        fun close() { setRunning(false); Handler(mainLooper).post { stopSelf() } }
+
+        // The overlay window is FLAG_NOT_FOCUSABLE so it never steals touches from the game.
+        // That also blocks the soft keyboard, so the sync-code field can't be typed into.
+        // The web calls this to make the window focusable only while entering text, then restore.
+        @JavascriptInterface
+        fun imeFocus(focus: Boolean) { setImeFocus(focus) }
 
         @JavascriptInterface
         fun openFull() { startExternal(Intent(Intent.ACTION_VIEW, Uri.parse(FULL_URL))) }

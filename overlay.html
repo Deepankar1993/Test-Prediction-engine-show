@@ -203,10 +203,16 @@ function syncStatus(st){ const b=$('sync'); if(!b)return;
   const m={connecting:'⇅ …',synced:'⇅ on',pulled:'⇅ ✓',err:'⇅ !',offline:'⇅ ?'};
   b.textContent=m[st]||'⇅ on'; b.style.color=(st==='err'||st==='offline')?'#ffd27f':'#7fe3c0';
   if($('syncGo'))$('syncGo').textContent='stop'; }
-$('sync').onclick=()=>{ const r=$('syncRow'); r.style.display=r.style.display==='none'?'flex':'none';
-  if(r.style.display==='flex'&&!$('syncCode').value) $('syncCode').value=SYLOX_SYNC.savedCode()||''; };
-$('syncGo').onclick=()=>{ if(SYLOX_SYNC.active()){ SYLOX_SYNC.disable(); syncStatus('off'); $('syncRow').style.display='none'; return; }
-  const c=$('syncCode').value.trim(); if(!c)return; SYLOX_SYNC.enable(c,()=>P,applyRemote,syncStatus); $('syncRow').style.display='none'; };
+// In the Android overlay the window is not-focusable (so it doesn't grab the game's touches),
+// which also blocks the keyboard. Ask the native shell to make it focusable while typing the code.
+function nativeIme(on){ try{ if(window.SyloxNative&&SyloxNative.imeFocus) SyloxNative.imeFocus(!!on); }catch(e){} }
+$('sync').onclick=()=>{ const r=$('syncRow'); const show=r.style.display==='none'; r.style.display=show?'flex':'none';
+  if(show){ if(!$('syncCode').value) $('syncCode').value=SYLOX_SYNC.savedCode()||'';
+    nativeIme(true); setTimeout(()=>{ try{$('syncCode').focus();}catch(e){} },60); }
+  else nativeIme(false); };
+$('syncGo').onclick=()=>{ if(SYLOX_SYNC.active()){ SYLOX_SYNC.disable(); syncStatus('off'); $('syncRow').style.display='none'; nativeIme(false); return; }
+  const c=$('syncCode').value.trim(); if(!c)return; SYLOX_SYNC.enable(c,()=>P,applyRemote,syncStatus); $('syncRow').style.display='none'; nativeIme(false); };
+$('syncCode').addEventListener('keydown',e=>{ if(e.key==='Enter') $('syncGo').click(); });
 if(SYLOX_SYNC.savedCode()) SYLOX_SYNC.enable(SYLOX_SYNC.savedCode(),()=>P,applyRemote,syncStatus);
 
 // when embedded in the Android overlay shell (?app=1) the native bar provides drag+close
