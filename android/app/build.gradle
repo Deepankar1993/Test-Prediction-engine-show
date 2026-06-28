@@ -24,8 +24,8 @@ android {
         minSdk 26
         targetSdk 35
         // CI passes an incrementing VERSION_CODE so signed updates install in place.
-        versionCode (System.getenv("VERSION_CODE") ?: "1").toInteger()
-        versionName (System.getenv("VERSION_NAME") ?: "1.0")
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInteger()
+        versionName = (System.getenv("VERSION_NAME") ?: "1.0")
     }
 
     buildTypes {
