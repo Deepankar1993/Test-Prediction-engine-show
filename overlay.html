@@ -133,7 +133,15 @@ $('undo').onclick=undo;
 $('open').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.openFull) SyloxNative.openFull();
   else window.open('fairness_demo.html','_blank'); }catch(e){ location.href='fairness_demo.html'; } };
 
-try{ P=load(); buildPad(); lockRound(); }
+// when embedded in the Android overlay shell (?app=1) the native bar provides drag+close
+const EMBED=new URLSearchParams(location.search).has('app');
+if(EMBED){ $('bar').style.display='none'; document.body.style.padding='0'; document.documentElement.style.background='transparent'; }
+// report our height to the native shell so the floating window hugs the content (no dead-zone)
+function reportHeight(){ try{ if(window.SyloxNative&&SyloxNative.resize){
+  SyloxNative.resize(Math.ceil(document.getElementById('ov').getBoundingClientRect().height)); } }catch(e){} }
+const _render=render; render=function(){ _render(); requestAnimationFrame(reportHeight); };
+
+try{ P=load(); buildPad(); lockRound(); reportHeight(); }
 catch(e){ document.body.innerHTML='<div class="err">overlay error: '+e.message+'</div>'; }
 </script>
 </body>
