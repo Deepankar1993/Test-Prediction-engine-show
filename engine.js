@@ -189,3 +189,10 @@ function fairVerify(r){
   if(sha256hex(r.serverSeed)!==r.commit) return false;
   return sumFromBytes(hmacSha256(r.serverSeed,`${r.clientSeed}:${r.nonce}`))===r.result;
 }
+
+// Node/CommonJS export guard — the browser ignores this (no `module`); it lets the
+// self-test do `require('./engine.js')` instead of eval'ing the file as a string.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { predict, predictReels, updateWeights, newWeights, topK, combineDists,
+    sigAll, sigDist, PRIOR, R, SIGNALS, convolve3, sumFromBytes, fairRound, fairVerify };
+}
