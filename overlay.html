@@ -24,6 +24,10 @@
   .chips{display:flex;gap:4px;flex-wrap:wrap;flex:1}
   .opct{font-size:10px;font-weight:700;color:var(--mut);white-space:nowrap;min-width:30px;text-align:right}
   .opct small{font-size:8px;font-weight:400;color:var(--faint);display:block;line-height:1}
+  .trust{font-size:9.5px;color:var(--mut);margin:0 0 5px;line-height:1.35}
+  .trust .tlab{font-size:8px;letter-spacing:.08em;color:var(--faint);text-transform:uppercase;margin-right:5px}
+  .trust b{font-weight:800}
+  .trust small{opacity:.65;font-size:8.5px}
   .chip{font-size:13px;font-weight:700;min-width:24px;text-align:center;padding:3px 4px;border-radius:6px}
   .chip small{display:block;font-size:8px;font-weight:600;opacity:.7;line-height:1;margin-top:1px}
   .old .chip{background:#22120f;border:1px solid rgba(239,93,68,.55);color:#ff9d8b}
@@ -59,6 +63,7 @@
   <div class="body">
     <div class="prow old"><span class="lab">OLD&nbsp;7</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 7"></span></div>
     <div class="prow new"><span class="lab">NEW&nbsp;4</span><span class="chips" id="new"></span></div>
+    <div class="trust" id="trust"></div>
     <div class="status" id="status">Tap the result that came up on the game.</div>
     <div class="recent" id="recent"></div>
     <div class="pad" id="pad"></div>
@@ -80,7 +85,7 @@
 <script src="sync.js"></script>
 <script>
 /* compact floating predictor — shares the sylox_livetest_v2 test with the full tool */
-const LS='sylox_livetest_v2', K_OLD=7, K_NEW=4;
+const LS='sylox_livetest_v2', K_OLD=7, K_NEW=4, CONF_THR=0.15;   // CONF_THR = "the engine is sure" cutoff for the trust meter
 const BASE8set=new Set(topK(PRIOR,K_OLD));
 const $=id=>document.getElementById(id);
 const dayKey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();};
@@ -89,7 +94,13 @@ let P=null, cur=null;
 function fresh(){ return {v:2,created:Date.now(),mode:'sum',Hold:[],Hnew:[],reels:[],
   Wold:newWeights(),Wnew:newWeights(),Wr:[newWeights(),newWeights(),newWeights()],
   oH:0,oR:0,bH:0,nH:0,nR:0,streak:0,best:0,days:{},lastTs:null,rounds:[],lastExport:0,
+  t1N:0,t1Hit:0,t1SumP:0,cHiN:0,cHiHit:0,           // trust meter: top-pick calibration + high-confidence hit rate
   seed:'player-'+Math.floor(Math.random()*1e9).toString(36)}; }
+// record one round's top-pick confidence + whether it landed (prequential: pred was made before the result)
+function trackTrust(o,pool,actual){ if(o.Hold.length<12||!pool) return;
+  const t1=topK(pool,1)[0], t1p=pool[t1];
+  o.t1N=(o.t1N||0)+1; o.t1SumP=(o.t1SumP||0)+t1p; if(t1===actual)o.t1Hit=(o.t1Hit||0)+1;
+  if(t1p>=CONF_THR){ o.cHiN=(o.cHiN||0)+1; if(t1===actual)o.cHiHit=(o.cHiHit||0)+1; } }
 function load(){ try{const s=JSON.parse(localStorage.getItem(LS));
   if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0;
     if(!s.Wold)s.Wold=newWeights(); if(!s.Wnew)s.Wnew=newWeights(); return s; } }catch(e){} return fresh(); }
@@ -107,6 +118,7 @@ function lockRound(){
 }
 function resolve(actual){
   const oldHit=cur.old.list.indexOf(actual)>=0; P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
+  trackTrust(P, cur.old.pool, actual);
   updateWeights(P.Wold,cur.old.dists,actual,K_OLD); P.Hold.push(actual);
   const res=cur.fair.result, ok=fairVerify(cur.fair), newHit=cur.nw.list.indexOf(res)>=0;
   P.nR++; if(newHit)P.nH++; updateWeights(P.Wnew,cur.nw.dists,res,K_NEW); P.Hnew.push(res);
@@ -125,6 +137,7 @@ function rebuildFrom(rounds, seed, created){
     if(e.seed) continue;   // warm-up/seed rounds retired: dropped on every rebuild so they can never re-enter via sync
     const c={ old:predict(np.Hold,np.Wold,K_OLD), nw:predict(np.Hnew,np.Wnew,K_NEW) };
     const oh=c.old.list.indexOf(e.s)>=0; np.oR++; if(oh)np.oH++; if(BASE8set.has(e.s))np.bH++;
+    trackTrust(np, c.old.pool, e.s);
     updateWeights(np.Wold,c.old.dists,e.s,K_OLD); np.Hold.push(e.s);
     const nh=c.nw.list.indexOf(e.nr)>=0; np.nR++; if(nh)np.nH++;
     updateWeights(np.Wnew,c.nw.dists,e.nr,K_NEW); np.Hnew.push(e.nr);
@@ -147,6 +160,17 @@ function undo(){
   np.lastExport=Math.min(P.lastExport,np.oR);
   P=np; P._last=null; save(); lockRound();
 }
+// TRUST METER — is the engine's confidence EARNED? When it is >=15% sure on its single
+// top number, how often does that number actually come up? On fair data this stays ~7%
+// (false confidence); when a real pattern exists it climbs well above the ~7.5% fair top-1.
+function renderTrust(){
+  const t=$('trust'); if(!t) return;
+  const hiN=P.cHiN||0, hiH=P.cHiHit||0;
+  if(hiN<8){ t.innerHTML=`<span class="tlab">trust</span> building… <small>${hiN}/8 confident calls</small>`; t.style.color='var(--faint)'; return; }
+  const y=Math.round(hiH/hiN*100), claim=P.t1N?Math.round(P.t1SumP/P.t1N*100):0;
+  t.innerHTML=`<span class="tlab">trust</span> ≥15% sure → lands <b>${y}%</b> <small>(${hiH}/${hiN} · top pick claims ~${claim}%)</small>`;
+  t.style.color = y>=15 ? '#7fe3c0' : (y>=8 ? '#ffd27f' : '#ff9d8b');   // earned / weak / false confidence
+}
 function render(){
   chipsP(cur.old.list,cur.old.pool,'old'); chips(cur.nw.list,'new');
   const o=P.oR?Math.round(P.oH/P.oR*100):0, b=P.oR?Math.round(P.bH/P.oR*100):0;
@@ -155,9 +179,10 @@ function render(){
   if(op){ if(P.oR){ op.innerHTML=`${o}%<small>${P.oH}/${P.oR} hit</small>`;
       op.style.color = o>=b ? '#7fe3c0' : (o>=b-4 ? '#ffd27f' : '#ff9d8b'); }   // green=beats baseline, amber=near, red=below
     else { op.innerHTML='<small>—</small>'; op.style.color=''; } }
+  renderTrust();
   const L=P._last;
   $('status').innerHTML = L
-    ? (L.oldHit?`<span class="hit">✓ HIT</span> — ${L.actual} was in OUR 8. `:`<span class="miss">✗ miss</span> — result ${L.actual}. `)
+    ? (L.oldHit?`<span class="hit">✓ HIT</span> — ${L.actual} was in OUR 7. `:`<span class="miss">✗ miss</span> — result ${L.actual}. `)
       + `Sylox: ${L.res} ${L.newHit?'(chance hit)':'<span class="hit">evaded</span>'}.`
     : 'Tap the result that came up on the game.';
   const rec=P.rounds.slice(-5);
@@ -236,8 +261,8 @@ function reportHeight(){ try{ if(window.SyloxNative&&SyloxNative.resize){
 const _render=render; render=function(){ _render(); requestAnimationFrame(reportHeight); };
 
 try{ P=load();
-  // self-clean: drop any warm-up/seed rounds so the overlay tracks live results only (no file needed)
-  if(P.rounds&&P.rounds.some(r=>r&&r.seed)){ P=rebuildFrom(P.rounds.filter(r=>!(r&&r.seed)),P.seed,P.created); save(); }
+  // self-clean + backfill: drop seed rounds, and (re)compute the trust meter from history if it's missing
+  if(P.rounds&&(P.rounds.some(r=>r&&r.seed)||P.t1N==null)){ P=rebuildFrom(P.rounds.filter(r=>!(r&&r.seed)),P.seed,P.created); save(); }
   // a test shared TO the Android app (via the share sheet) arrives here on open
   try{ if(window.SyloxNative&&SyloxNative.pendingImport){ const pend=SyloxNative.pendingImport(); if(pend) window.__sxImport(pend); } }catch(e){}
   buildPad(); lockRound(); reportHeight(); }
