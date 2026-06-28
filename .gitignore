@@ -2,6 +2,9 @@
 # live game screenshots with visible usernames). Kept local only.
 ref/
 
+# Local-only working notes (not for the public repo)
+CLAUDE.md
+
 # OS / editor junk
 Thumbs.db
 desktop.ini
