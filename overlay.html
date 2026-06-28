@@ -110,11 +110,10 @@ function resolve(actual){
   P._last={actual,oldHit,res,newHit,ok};
   save(); lockRound();
 }
-function undo(){
-  if(!P.rounds.length) return;
-  // rebuild state from history minus the last round (cheap: replay)
-  const rounds=P.rounds.slice(0,-1);
-  const np=fresh(); np.seed=P.seed; np.created=P.created;
+// Deterministically rebuild the full state by replaying a timestamped round log.
+// This is the single source of truth used by both undo and cross-device merge.
+function rebuildFrom(rounds, seed, created){
+  const np=fresh(); np.seed=seed; np.created=created;
   for(const e of rounds){
     const c={ old:predict(np.Hold,np.Wold,K_OLD), nw:predict(np.Hnew,np.Wnew,K_NEW) };
     const oh=c.old.list.indexOf(e.s)>=0; np.oR++; if(oh)np.oH++; if(BASE8set.has(e.s))np.bH++;
@@ -125,6 +124,18 @@ function undo(){
     const dk=dayKey(e.t); const dd=np.days[dk]||(np.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oh)dd.oH++; if(BASE8set.has(e.s))dd.bH++;
     np.rounds.push(e);
   }
+  return np;
+}
+// Union two round logs, keyed by timestamp, ordered chronologically. No round is ever lost.
+function mergeRounds(a,b){
+  const m=new Map();
+  for(const e of (a||[])) if(e&&e.t!=null) m.set(e.t,e);
+  for(const e of (b||[])) if(e&&e.t!=null && !m.has(e.t)) m.set(e.t,e);
+  return [...m.values()].sort((x,y)=>x.t-y.t);
+}
+function undo(){
+  if(!P.rounds.length) return;
+  const np=rebuildFrom(P.rounds.slice(0,-1), P.seed, P.created);
   np.lastExport=Math.min(P.lastExport,np.oR);
   P=np; P._last=null; save(); lockRound();
 }
@@ -172,7 +183,21 @@ $('impFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new 
   r.onload=()=>window.__sxImport(r.result); r.readAsText(f); };
 
 // ---- live cross-device sync (Firebase Realtime DB) ----
-function applyRemote(s){ P=s; try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){} lockRound(); }
+// MERGE, never replace: take the union of this device's rounds and the remote's, then
+// replay to rebuild. So two phones / phone+PC converge to the COMBINED history and a
+// round entered on either device can never wipe the other's data.
+function applyRemote(s){
+  if(!s || s.v!==2 || !Array.isArray(s.rounds)) return;
+  const localN=(P.rounds||[]).length, remoteN=s.rounds.length;
+  const merged=mergeRounds(P.rounds, s.rounds);
+  if(merged.length===localN && remoteN<=localN) return;        // remote brought nothing new
+  const np=rebuildFrom(merged, P.seed||s.seed, Math.min(P.created||Date.now(), s.created||Date.now()));
+  np.lastExport=Math.min(P.lastExport||0, np.oR); np.mode=P.mode||s.mode||'sum'; np._last=P._last;
+  const weContributed = merged.length > remoteN;               // we had rounds the remote lacked
+  P=np; try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
+  lockRound();
+  if(weContributed){ try{ if(SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }  // push the superset back
+}
 function syncStatus(st){ const b=$('sync'); if(!b)return;
   if(!SYLOX_SYNC.active()){ b.textContent='⇅ sync'; b.style.color=''; if($('syncGo'))$('syncGo').textContent='connect'; return; }
   const m={connecting:'⇅ …',synced:'⇅ on',pulled:'⇅ ✓',err:'⇅ !',offline:'⇅ ?'};
