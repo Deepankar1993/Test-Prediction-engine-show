@@ -25,6 +25,7 @@
   .opct{font-size:10px;font-weight:700;color:var(--mut);white-space:nowrap;min-width:30px;text-align:right}
   .opct small{font-size:8px;font-weight:400;color:var(--faint);display:block;line-height:1}
   .chip{font-size:13px;font-weight:700;min-width:24px;text-align:center;padding:3px 4px;border-radius:6px}
+  .chip small{display:block;font-size:8px;font-weight:600;opacity:.7;line-height:1;margin-top:1px}
   .old .chip{background:#22120f;border:1px solid rgba(239,93,68,.55);color:#ff9d8b}
   .new .chip{background:#0f2018;border:1px solid rgba(34,192,138,.55);color:#7fe3c0}
   .status{font-size:11px;margin:6px 0 4px;min-height:15px;color:var(--mut);line-height:1.35}
@@ -56,7 +57,7 @@
     <button class="x" id="x" title="close">×</button>
   </div>
   <div class="body">
-    <div class="prow old"><span class="lab">OLD&nbsp;8</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 8"></span></div>
+    <div class="prow old"><span class="lab">OLD&nbsp;7</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 7"></span></div>
     <div class="prow new"><span class="lab">NEW&nbsp;4</span><span class="chips" id="new"></span></div>
     <div class="status" id="status">Tap the result that came up on the game.</div>
     <div class="recent" id="recent"></div>
@@ -79,8 +80,8 @@
 <script src="sync.js"></script>
 <script>
 /* compact floating predictor — shares the sylox_livetest_v2 test with the full tool */
-const LS='sylox_livetest_v2', K_OLD=8, K_NEW=4;
-const BASE8set=new Set(topK(PRIOR,8));
+const LS='sylox_livetest_v2', K_OLD=7, K_NEW=4;
+const BASE8set=new Set(topK(PRIOR,K_OLD));
 const $=id=>document.getElementById(id);
 const dayKey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();};
 let P=null, cur=null;
@@ -96,6 +97,10 @@ function save(){ try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
   try{ if(window.SYLOX_SYNC&&SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }
 
 function chips(arr,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>`<span class="chip">${n}</span>`).join(''); }
+// like chips() but shows each number's model probability (confidence) underneath it
+function chipsP(arr,pool,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>{
+  const p=(pool&&isFinite(pool[n]))?Math.round(pool[n]*100):0;
+  return `<span class="chip">${n}<small>${p}%</small></span>`; }).join(''); }
 function lockRound(){
   cur={ old:predict(P.Hold,P.Wold,K_OLD), nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
   render();
@@ -143,7 +148,7 @@ function undo(){
   P=np; P._last=null; save(); lockRound();
 }
 function render(){
-  chips(cur.old.list,'old'); chips(cur.nw.list,'new');
+  chipsP(cur.old.list,cur.old.pool,'old'); chips(cur.nw.list,'new');
   const o=P.oR?Math.round(P.oH/P.oR*100):0, b=P.oR?Math.round(P.bH/P.oR*100):0;
   $('st').textContent=`${P.oR}r · ${o}% (base ${b}%) · ✦${P.streak}`;
   const op=$('oldPct');

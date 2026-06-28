@@ -730,7 +730,7 @@ renderHistStats(); refreshPreview();
 
 // ================= LIVE PREDICTION TOOL (persists across a 7-8 day test) =================
 const BAD='#ef5d44', GOOD='#22c08a', STEEL='#5b8bd0', AMBER='#e0a93c';
-const LS_KEY='sylox_livetest_v2', K_OLD=8, K_NEW=4, MINN=80;
+const LS_KEY='sylox_livetest_v2', K_OLD=7, K_NEW=4, MINN=80;
 const BASE8=topK(PRIOR,K_OLD), BASE8set=new Set(BASE8);     // central-8 = the no-skill baseline
 const baseProb8=BASE8.reduce((s,k)=>s+PRIOR[k],0);          // ~0.560
 let P=null, cur=null, apTimer=null, isDemo=false, focusOpen=false, reelPick=[null,null,null];
@@ -840,13 +840,13 @@ function buildArena(){
     <div class="card bad show">
       <span class="tag bad">Old engine · the live game</span>
       <div class="recent small" id="oldRecent"></div>
-      <h2>Our prediction — 8 numbers</h2>
-      <div class="desc">The engine's top 8 for the next round, learned from your history.
+      <h2>Our prediction — 7 numbers</h2>
+      <div class="desc">The engine's top 7 for the next round, learned from your history.
         <b>Check them against the live app.</b></div>
       <div class="bigchips" id="oldChips"></div>
       <div class="patline" id="oldPattern"></div>
       <div class="rl"><span class="k">last round</span><span id="oldOutcome">&mdash;</span></div>
-      <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 8?</span><span></span></div><div id="logL"></div></div>
+      <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 7?</span><span></span></div><div id="logL"></div></div>
     </div>
     <div class="card good show">
       <span class="tag good">New engine · Sylox commit-reveal</span>
@@ -936,14 +936,14 @@ function patternStatus(list){
   const off=list.filter(x=>!BASE8set.has(x)).length;        // numbers off the no-skill central block
   const usingReels = P.mode==='reels' && P.reels.length>=12;
   if(off<=1) return {cls:'scan', txt:`scanning — no exploitable pattern yet, showing the fair baseline.${P.mode!=='reels'?' Try <b>reel entry</b> to expose per-reel structure.':''}`};
-  return {cls:'lock', txt:`<b>PATTERN LOCKED</b> — ${off}/8 numbers off the baseline${usingReels?' (per-reel)':''}. These are real, structure-driven picks.`};
+  return {cls:'lock', txt:`<b>PATTERN LOCKED</b> — ${off}/7 numbers off the baseline${usingReels?' (per-reel)':''}. These are real, structure-driven picks.`};
 }
 function logRow(id,n,result,hit,extra){
   $(id).insertAdjacentHTML('afterbegin',
    `<div class="log-row"><span class="neutral">${n}</span><span>${result}</span>`+
    `<span class="${hit?'hit':'miss'}">${hit?'✓':'—'}</span><span>${extra||''}</span></div>`);
 }
-// the last ~10 results (newest on the right); green = it landed in our 8 that round
+// the last ~10 results (newest on the right); green = it landed in our 7 that round
 function recentStrip(){
   const lab='<span class="rlab">recent &rarr;</span>';
   const rec=(P.rounds&&P.rounds.length)?P.rounds.slice(-10):null;
@@ -955,7 +955,7 @@ function pulse(el){ if(!el)return; el.classList.remove('pulse'); void el.offsetW
 function submit(A){ if(!P) return; resolveRound(A, null, true); }       // sum tap = a real live-app result
 function submitReels(rs){ if(!P) return; resolveRound(rs[0]+rs[1]+rs[2], rs, true); }
 function resolveRound(actual, reels, toBox){
-  // OLD engine (the live game): did our 8 contain the result?
+  // OLD engine (the live game): did our 7 contain the result?
   const oldHit=cur.old.list.indexOf(actual)>=0;
   P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
   updateWeights(P.Wold,cur.sumDists,actual,K_OLD);                      // sum ensemble keeps learning
@@ -972,7 +972,7 @@ function resolveRound(actual, reels, toBox){
   if(!isDemo) P.rounds.push({t:ts, s:actual, r:reels||null, oh:oldHit, nr:res, nh:newHit});  // timestamped log (real rounds only)
   // feedback
   const shown=`${actual}${reels?` <span class="dim">(${reels.join('+')})</span>`:''}`;
-  $('oldOutcome').innerHTML=oldHit?`<span class="hitn">PREDICTED ✓ — ${shown} was in our 8</span>`
+  $('oldOutcome').innerHTML=oldHit?`<span class="hitn">PREDICTED ✓ — ${shown} was in our 7</span>`
                                   :`<span class="missn">missed — ${shown}</span>`;
   $('newOutcome').innerHTML=newHit?`<span class="missn">chance hit — ${res}</span>`
                                   :`<span class="hitn">EVADED ✓ — ${res} not in our 4</span>`;
@@ -994,8 +994,8 @@ function render(){
   const days=Object.keys(P.days).length;
   let state,label,text;
   if(P.oR<MINN){ state='thin'; label='COLLECTING'; text=`need ≥${MINN} live rounds for a verdict (${P.oR} so far)`; }
-  else if(olo>b){ state='flag'; label='GENUINE EDGE'; text=`our 8 hit ${(o*100).toFixed(0)}% [95% CI ${(olo*100).toFixed(0)}–${(ohi*100).toFixed(0)}], beating the no-skill baseline ${(b*100).toFixed(0)}% — the old engine is predictable.`; }
-  else{ state='clean'; label='NO EDGE YET'; text=`our 8 hit ${(o*100).toFixed(0)}% vs baseline ${(b*100).toFixed(0)}% — within noise, this engine looks fair so far.`; }
+  else if(olo>b){ state='flag'; label='GENUINE EDGE'; text=`our 7 hit ${(o*100).toFixed(0)}% [95% CI ${(olo*100).toFixed(0)}–${(ohi*100).toFixed(0)}], beating the no-skill baseline ${(b*100).toFixed(0)}% — the old engine is predictable.`; }
+  else{ state='clean'; label='NO EDGE YET'; text=`our 7 hit ${(o*100).toFixed(0)}% vs baseline ${(b*100).toFixed(0)}% — within noise, this engine looks fair so far.`; }
   $('accStrip').innerHTML=
     `<span class="ak">live test</span>`+
     `<span class="averdict ${state==='flag'?'flag':state==='clean'?'clean':'thin'}">${label}</span>`+
@@ -1011,7 +1011,7 @@ function render(){
   const bp=P.oR?(b*100).toFixed(0):(baseProb8*100).toFixed(0);
   $('edgeNote').innerHTML=
     `<b>How to read it.</b> The no-skill baseline is what a fixed central-8 cover scores on this exact stream — currently <b>${bp}%</b> `+
-    `(on a fair sum-of-dice game that is ~${(baseProb8*100).toFixed(0)}%). Skill is our 8 landing <em>above</em> ${bp}% with the 95% interval clear of it. `+
+    `(on a fair sum-of-dice game that is ~${(baseProb8*100).toFixed(0)}%). Skill is our 7 landing <em>above</em> ${bp}% with the 95% interval clear of it. `+
     `On the provably-fair engine the edge stays at zero by construction — the seed is sealed, so there is nothing to learn.`;
   if(focusOpen) renderFocus();
 }
@@ -1026,7 +1026,7 @@ function ensureFocus(){
       <div class="focus-head"><span class="fmode" id="fMode">● LIVE</span><span class="fstats" id="fStats"></span>
         <button class="fclose" id="fClose" aria-label="close">&times;</button></div>
       <div class="focus-old">
-        <div class="fp-lab">Old engine · our 8 — <b>check the live game</b></div>
+        <div class="fp-lab">Old engine · our 7 — <b>check the live game</b></div>
         <div class="recent small" id="fRecent"></div>
         <div class="bigchips" id="fOldChips"></div>
         <div class="patline" id="fPattern"></div>
@@ -1051,7 +1051,7 @@ function renderFocus(){
   if(!focusOpen||!$('focusOverlay')) return;
   const o=P.oR?P.oH/P.oR*100:0, b=P.oR?P.bH/P.oR*100:0, e=o-b;
   $('fMode').textContent=isDemo?'▮ DEMO':'● LIVE'; $('fMode').className='fmode'+(isDemo?' demo':'');
-  $('fStats').innerHTML=`<b>${P.oR}</b> rnds · our 8 <b>${o.toFixed(0)}%</b> vs ${b.toFixed(0)}% · `+
+  $('fStats').innerHTML=`<b>${P.oR}</b> rnds · our 7 <b>${o.toFixed(0)}%</b> vs ${b.toFixed(0)}% · `+
     `edge <b>${(e>=0?'+':'')+e.toFixed(0)}pt</b> · streak <b>${P.streak}</b>`;
   $('fOldChips').innerHTML=chips(cur.old.list,'old');
   $('fNewChips').innerHTML=chips(cur.nw.list,'new');

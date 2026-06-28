@@ -136,8 +136,8 @@ function topK(arr,k){ const C=(arr.length-1)/2;
     const va=isFinite(arr[a])?arr[a]:-Infinity, vb=isFinite(arr[b])?arr[b]:-Infinity;
     return (vb-va) || (Math.abs(a-C)-Math.abs(b-C)) || (a-b);
   }).slice(0,k); }
-function predict(H,W,k,RG,PRI){ const dists=sigAll(H,RG,PRI);
-  return {list:topK(combineDists(dists,W,RG,PRI),k), dists}; }
+function predict(H,W,k,RG,PRI){ const dists=sigAll(H,RG,PRI); const pool=combineDists(dists,W,RG,PRI);
+  return {list:topK(pool,k), dists, pool}; }   // pool = per-number probability of the next result
 function updateWeights(W,dists,actual,k){
   for(const nm of SIGNALS){ const d=dists[nm]; if(!d) continue;
     const inTop=topK(d,k).indexOf(actual)>=0; W[nm]*=Math.exp(ETA*((inTop?1:0)-0.5)); }
