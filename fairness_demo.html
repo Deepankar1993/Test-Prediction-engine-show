@@ -460,6 +460,7 @@
   </div>
 </div>
 
+<script src="sync.js"></script>
 <script>
 /* ============================================================
    Pure-JS SHA-256 + HMAC  (so the file verifies offline, file://)
@@ -751,7 +752,18 @@ function newState(){
 function loadState(){ try{const s=JSON.parse(localStorage.getItem(LS_KEY));
   if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0; return s; } return null; }catch(e){return null;} }
 const REMIND_EVERY=30;   // nudge the tester to back up every N live rounds
-function saveState(){ if(isDemo) return; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){} }
+function saveState(){ if(isDemo) return; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){}
+  try{ if(window.SYLOX_SYNC&&SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }
+function syncApply(s){ P=s; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){} buildArena(); lockRound(); render(); }
+function updateSyncBtn(st){ const b=$('btnSync'); if(!b) return;
+  const on=window.SYLOX_SYNC&&SYLOX_SYNC.active();
+  b.textContent = on ? ('⇅ '+(st==='pulled'?'synced ✓':st==='offline'?'offline?':st==='err'?'rules?':'on')) : '⇅ sync';
+  b.classList.toggle('hi', !!on); }
+function syncToggle(){
+  if(window.SYLOX_SYNC&&SYLOX_SYNC.active()){ if(confirm('Stop cross-device sync on this device?')){ SYLOX_SYNC.disable(); updateSyncBtn(); } return; }
+  const c=prompt('Enter a sync code — use the SAME code on your phone app to mirror the test live:', (window.SYLOX_SYNC&&SYLOX_SYNC.savedCode())||'');
+  if(c&&c.trim()){ SYLOX_SYNC.enable(c.trim(), ()=>P, syncApply, updateSyncBtn); updateSyncBtn(); }
+}
 
 function buildArena(){
   $('out').innerHTML=`
@@ -768,6 +780,7 @@ function buildArena(){
       <button class="mini" id="apStop">stop</button>
       <button class="mini" id="btnExport">export</button>
       <button class="mini" id="btnImport">import</button>
+      <button class="mini" id="btnSync">⇅ sync</button>
       <button class="mini" id="btnReset">reset</button>
       <input type="file" id="importFile" accept="application/json" hidden>
     </span>
@@ -812,7 +825,9 @@ function buildArena(){
   $('btnExport').onclick=exportData;
   $('btnImport').onclick=()=>$('importFile').click();
   $('importFile').onchange=e=>{ if(e.target.files[0]) importData(e.target.files[0]); };
+  $('btnSync').onclick=syncToggle;
   $('btnReset').onclick=resetTest;
+  updateSyncBtn();
 }
 // entry area renderer — sum numpad (0–27) or 3 reel rows (0–9); shared by main + focus
 function renderEntry(id, focus){
@@ -1083,6 +1098,8 @@ function flashStarted(){
 $('runBtn').onclick=()=>{ beginSession(); flashStarted(); };
 $('runBtn').textContent='Begin / resume session';
 beginSession();
+// resume cross-device sync if a code was set earlier
+if(window.SYLOX_SYNC&&SYLOX_SYNC.savedCode()){ SYLOX_SYNC.enable(SYLOX_SYNC.savedCode(), ()=>P, syncApply, updateSyncBtn); }
 
 </script>
 </body>

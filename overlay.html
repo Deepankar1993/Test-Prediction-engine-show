@@ -42,6 +42,9 @@
   .mini{flex:1;font-size:10px;padding:5px 0;border-radius:6px;background:rgba(15,25,37,.85);
     border:1px solid rgba(91,139,208,.25);color:var(--mut);cursor:pointer;text-align:center}
   .err{color:var(--bad);font-size:11px;padding:10px}
+  .syncRow{display:flex;gap:5px;margin-top:6px}
+  .syncRow input{flex:1;min-width:0;background:rgba(13,23,34,.9);border:1px solid rgba(91,139,208,.3);
+    color:#eaf1f8;font-family:var(--mono);font-size:11px;padding:6px 7px;border-radius:6px;outline:none}
 </style>
 </head>
 <body>
@@ -57,15 +60,21 @@
     <div class="recent" id="recent"></div>
     <div class="pad" id="pad"></div>
     <div class="miniBtns">
+      <div class="mini" id="sync">⇅ sync</div>
       <div class="mini" id="undo">undo</div>
       <div class="mini" id="exp">export</div>
       <div class="mini" id="imp">import</div>
       <div class="mini" id="open">full ↗</div>
     </div>
+    <div class="syncRow" id="syncRow" style="display:none">
+      <input id="syncCode" placeholder="sync code — same on both devices" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="mini" id="syncGo">connect</div>
+    </div>
     <input type="file" id="impFile" accept="application/json" hidden>
   </div>
 </div>
 <script src="engine.js"></script>
+<script src="sync.js"></script>
 <script>
 /* compact floating predictor — shares the sylox_livetest_v2 test with the full tool */
 const LS='sylox_livetest_v2', K_OLD=8, K_NEW=4;
@@ -81,7 +90,8 @@ function fresh(){ return {v:2,created:Date.now(),mode:'sum',Hold:[],Hnew:[],reel
 function load(){ try{const s=JSON.parse(localStorage.getItem(LS));
   if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0;
     if(!s.Wold)s.Wold=newWeights(); if(!s.Wnew)s.Wnew=newWeights(); return s; } }catch(e){} return fresh(); }
-function save(){ try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){} }
+function save(){ try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
+  try{ if(window.SYLOX_SYNC&&SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }
 
 function chips(arr,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>`<span class="chip">${n}</span>`).join(''); }
 function lockRound(){
@@ -160,6 +170,19 @@ $('exp').onclick=exportData;
 $('imp').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.importFile){ SyloxNative.importFile(); return; } }catch(e){} $('impFile').click(); };
 $('impFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
   r.onload=()=>window.__sxImport(r.result); r.readAsText(f); };
+
+// ---- live cross-device sync (Firebase Realtime DB) ----
+function applyRemote(s){ P=s; try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){} lockRound(); }
+function syncStatus(st){ const b=$('sync'); if(!b)return;
+  if(!SYLOX_SYNC.active()){ b.textContent='⇅ sync'; b.style.color=''; if($('syncGo'))$('syncGo').textContent='connect'; return; }
+  const m={connecting:'⇅ …',synced:'⇅ on',pulled:'⇅ ✓',err:'⇅ !',offline:'⇅ ?'};
+  b.textContent=m[st]||'⇅ on'; b.style.color=(st==='err'||st==='offline')?'#ffd27f':'#7fe3c0';
+  if($('syncGo'))$('syncGo').textContent='stop'; }
+$('sync').onclick=()=>{ const r=$('syncRow'); r.style.display=r.style.display==='none'?'flex':'none';
+  if(r.style.display==='flex'&&!$('syncCode').value) $('syncCode').value=SYLOX_SYNC.savedCode()||''; };
+$('syncGo').onclick=()=>{ if(SYLOX_SYNC.active()){ SYLOX_SYNC.disable(); syncStatus('off'); $('syncRow').style.display='none'; return; }
+  const c=$('syncCode').value.trim(); if(!c)return; SYLOX_SYNC.enable(c,()=>P,applyRemote,syncStatus); $('syncRow').style.display='none'; };
+if(SYLOX_SYNC.savedCode()) SYLOX_SYNC.enable(SYLOX_SYNC.savedCode(),()=>P,applyRemote,syncStatus);
 
 // when embedded in the Android overlay shell (?app=1) the native bar provides drag+close
 const EMBED=new URLSearchParams(location.search).has('app');
