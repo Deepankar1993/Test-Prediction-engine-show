@@ -324,6 +324,10 @@
     background:#0d1722;border:1px solid var(--line-soft);color:var(--muted);transition:.15s}
   .recent .rv.hit{border-color:#1c4a3b;color:var(--good)}
   .recent .rv.now{outline:2px solid var(--steel);outline-offset:1px;color:var(--text);font-weight:600}
+  .recent.small{margin:6px 0 0;gap:4px}
+  .recent.small .rlab{font-size:9px;margin-right:1px}
+  .recent.small .rv{font-size:10.5px;min-width:19px;padding:2px 4px;border-radius:4px}
+  .recent.small .rv.now{outline-width:1.5px}
   .bigchips.pulse{animation:chippulse .5s ease}
   @keyframes chippulse{0%{opacity:.3;transform:translateY(-2px)}100%{opacity:1;transform:none}}
   .rl .hitn{color:var(--bad);font-weight:600}
@@ -761,12 +765,12 @@ function buildArena(){
   <div class="arena-grid">
     <div class="card bad show">
       <span class="tag bad">Old engine · the live game</span>
+      <div class="recent small" id="oldRecent"></div>
       <h2>Our prediction — 8 numbers</h2>
       <div class="desc">The engine's top 8 for the next round, learned from your history.
         <b>Check them against the live app.</b></div>
       <div class="bigchips" id="oldChips"></div>
       <div class="patline" id="oldPattern"></div>
-      <div class="recent" id="oldRecent"></div>
       <div class="rl"><span class="k">last round</span><span id="oldOutcome">&mdash;</span></div>
       <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 8?</span><span></span></div><div id="logL"></div></div>
     </div>
@@ -945,9 +949,9 @@ function ensureFocus(){
         <button class="fclose" id="fClose" aria-label="close">&times;</button></div>
       <div class="focus-old">
         <div class="fp-lab">Old engine · our 8 — <b>check the live game</b></div>
+        <div class="recent small" id="fRecent"></div>
         <div class="bigchips" id="fOldChips"></div>
         <div class="patline" id="fPattern"></div>
-        <div class="recent" id="fRecent"></div>
         <div class="fp-out" id="fOldOut">&mdash;</div>
       </div>
       <div class="focus-new">
