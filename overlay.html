@@ -31,6 +31,7 @@
   .chip{font-size:13px;font-weight:700;min-width:24px;text-align:center;padding:3px 4px;border-radius:6px}
   .chip small{display:block;font-size:8px;font-weight:600;opacity:.7;line-height:1;margin-top:1px}
   .old .chip{background:#22120f;border:1px solid rgba(239,93,68,.55);color:#ff9d8b}
+  .eng .chip{background:#101a2a;border:1px solid rgba(91,139,208,.55);color:#9fc4f0}
   .new .chip{background:#0f2018;border:1px solid rgba(34,192,138,.55);color:#7fe3c0}
   .status{font-size:11px;margin:6px 0 4px;min-height:15px;color:var(--mut);line-height:1.35}
   .status .hit{color:var(--good);font-weight:700}
@@ -66,7 +67,8 @@
     <button class="x" id="x" title="close">×</button>
   </div>
   <div class="body">
-    <div class="prow old"><span class="lab">OLD&nbsp;7</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 7"></span></div>
+    <div class="prow old"><span class="lab">BET&nbsp;7</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 7"></span></div>
+    <div class="prow eng"><span class="lab">ENG&nbsp;7</span><span class="chips" id="eng"></span><span class="opct" id="engPct" title="the learning engine's own picks — tracked (shadow), bet only once it earns edge"></span></div>
     <div class="prow new"><span class="lab">NEW&nbsp;4</span><span class="chips" id="new"></span></div>
     <div class="trust" id="trust"></div>
     <div class="status" id="status">Tap the result that came up on the game.</div>
@@ -212,6 +214,15 @@ function renderTrust(){
 }
 function render(){
   chipsP(cur.old.list,cur.old.pool,'old'); chips(cur.nw.list,'new');
+  // the engine's OWN picks, always visible (shadow-tracked; folded into the bet once earned)
+  chipsP(cur.old.fullList,cur.old.fullPool,'eng');
+  const ep=$('engPct');
+  if(ep){ const sN=P.shN||0;
+    if(sN){ const e=Math.round((P.shH||0)/sN*100);
+      ep.innerHTML=`${e}%<small>${P.shH||0}/${sN} shadow</small>`;
+      const bb=P.oR?Math.round(P.bH/P.oR*100):0;
+      ep.style.color = e>=bb ? '#7fe3c0' : (e>=bb-4 ? '#ffd27f' : '#ff9d8b'); }
+    else { ep.innerHTML='<small>—</small>'; ep.style.color=''; } }
   const o=P.oR?Math.round(P.oH/P.oR*100):0, b=P.oR?Math.round(P.bH/P.oR*100):0;
   $('st').textContent=`${P.oR}r · ${o}% (base ${b}%) · ✦${P.streak}`;
   const op=$('oldPct');
