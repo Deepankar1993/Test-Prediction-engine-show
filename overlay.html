@@ -291,7 +291,13 @@ if(SYLOX_SYNC.savedCode()) SYLOX_SYNC.enable(SYLOX_SYNC.savedCode(),()=>P,applyR
 // ---- AI analyst for ENG (ai.js): off / on demand / live ----
 // on demand: buttons only. live: the AI picks every round automatically and re-tunes ENG every N rounds.
 let aiBusy={pick:false,tune:false}, aiMsg='', aiErr=false;
-function aiCtx(){
+// cut: show the AI only rounds [0, cut) — used by tuning so the held-out window stays unseen
+function aiCtx(cut){
+  if(cut!=null && cut<P.Hold.length){ const H=P.Hold.slice(0,cut), b=H.filter(v=>BASE8set.has(v)).length;
+    return { history:H, reels:P.rounds.slice(0,cut).filter(e=>e.r).map(e=>e.r),
+      stats:{ rounds:cut, central7_hit_rate:H.length?+(b/H.length).toFixed(3):null,
+        note:'the most recent rounds are held back to test your tuning on data you have not seen' },
+      weights:{}, params:paramsAt(P,Date.now()) }; }
   const n=P.aiN||0, sN=P.shN||0;
   return { history:P.Hold.slice(), reels:(P.reels||[]).slice(),
     stats:{ rounds:P.oR, central7_hit_rate:P.oR?+(P.bH/P.oR).toFixed(3):null,
@@ -309,18 +315,38 @@ async function aiPickNow(){
   catch(e){ aiSay(e.message,true); }
   finally{ aiBusy.pick=false; renderAi(); }
 }
+// VALIDATED tuning: the AI studies only the older rounds; its tweak is then replayed on the most
+// recent ones it never saw and adopted only if it beats BOTH the current ENG tuning and the
+// central-7 baseline (by >= TUNE_MARGIN). On 400 rounds luck alone spreads tunings by ~10pts, so a
+// tweak that merely looks good on the rounds it was fitted to is rejected, with the scores shown.
+const TUNE_MARGIN=0.02, TUNE_KEY='sylox_ai_lasttune';
+const pc=x=>(x*100).toFixed(1)+'%';
 async function aiTuneNow(){
-  if(aiBusy.tune) return; aiBusy.tune=true; aiSay('AI is analyzing all rounds…');
-  try{ const r=await SYLOX_AI.tune(aiCtx()); const t=Date.now();
-    P.engLog=mergeLog(P.engLog,[{t,id:newRoundId(t),by:'ai',signals:r.signals,aiWeight:r.aiWeight,note:r.note,n:P.rounds.length}]);
-    save(); lockRound(); aiSay('ENG re-tuned: '+r.note); }
+  if(aiBusy.tune) return;
+  const H=P.Hold.slice(), N=H.length;
+  if(N<80){ aiSay(`Need 80+ rounds to test a tuning fairly (${N} so far).`); return; }
+  const V=Math.min(100,Math.floor(N/4)), cut=N-V;
+  aiBusy.tune=true; aiSay(`AI is studying rounds 1–${cut} (the last ${V} are held back)…`);
+  try{ try{ localStorage.setItem(TUNE_KEY,String(P.rounds.length)); }catch(e){}
+    const r=await SYLOX_AI.tune(aiCtx(cut));
+    aiSay(`Testing the AI's tuning on the last ${V} rounds it never saw…`);
+    await new Promise(res=>setTimeout(res,30));   // let the message paint before the replay
+    const cand=SYLOX_CORE.scoreTuning(H,r.signals,cut), now=SYLOX_CORE.scoreTuning(H,paramsAt(P,Date.now()).signals,cut);
+    const a=cand.h/cand.n, c=now.h/now.n, b=cand.b/cand.n;
+    const score=`AI tune ${pc(a)} · current ENG ${pc(c)} · central ${pc(b)} on ${V} unseen rounds`;
+    if(a>c && a>=b+TUNE_MARGIN){ const t=Date.now();
+      P.engLog=mergeLog(P.engLog,[{t,id:newRoundId(t),by:'ai',signals:r.signals,aiWeight:r.aiWeight,note:r.note,n:P.rounds.length,
+        val:{ai:+a.toFixed(3),cur:+c.toFixed(3),base:+b.toFixed(3),v:V}}]);
+      save(); lockRound(); aiSay('✓ Adopted — '+score+'. '+r.note); }
+    else aiSay(`✗ Not adopted — ${score}. ${a<=c?"It didn't beat the current ENG.":"It didn't beat the central numbers by 2+ pts."} ENG unchanged.`);
+  }
   catch(e){ aiSay(e.message,true); }
   finally{ aiBusy.tune=false; renderAi(); }
 }
 function aiAfterRound(){ const c=SYLOX_AI.cfg(); if(c.mode!=='live'||!SYLOX_AI.ready()) return;
   aiPickNow();
-  const last=(P.engLog||[]).filter(e=>e.by==='ai').pop(), since=P.rounds.length-(last?last.n||0:0);
-  if(since>=(+c.retuneEvery||25)) aiTuneNow(); }
+  let last=0; try{ last=+localStorage.getItem(TUNE_KEY)||0; }catch(e){}   // last ATTEMPT (adopted or not), so rejections don't retry every round
+  if(P.rounds.length-last>=(+c.retuneEvery||25)) aiTuneNow(); }
 function renderAi(){ if(!$('aiRow')) return;
   const c=SYLOX_AI.cfg(), on=c.mode!=='off';
   $('aiRow').style.display=on?'grid':'none';

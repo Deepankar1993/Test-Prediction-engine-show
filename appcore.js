@@ -103,6 +103,18 @@ window.SYLOX_CORE = (function () {
     }
     return np;
   }
+  // Score an ENG tuning walk-forward on results H, counting only rounds from index `from` on (the
+  // held-out window). The engine still learns from every round before each prediction, exactly as
+  // live — only the scoring is restricted. Returns {h: ENG hits, b: central-7 hits, n: rounds scored}.
+  function scoreTuning(H, signals, from) {
+    let W = newWeights(), h = 0, b = 0, n = 0;
+    for (let i = 0; i < H.length; i++) {
+      const p = predictEng(H.slice(0, i), W, K_OLD, { signals });
+      if (i >= from) { n++; if (p.rawList.indexOf(H[i]) >= 0) h++; if (BASE7.has(H[i])) b++; }
+      updateEng(W, p, H[i], K_OLD);
+    }
+    return { h, b, n };
+  }
   // Round identity: a per-round random id (two phones can tap in the same millisecond);
   // legacy rounds without one fall back to their timestamp.
   const newRoundId = ts => ts.toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -132,5 +144,5 @@ window.SYLOX_CORE = (function () {
 
   return { K_OLD, K_NEW, CONF_THR, BASE7, dayKey, fresh, normalize, needsRebuild, trackTrust, trustK, blendBet,
     paramsAt, aiTrust, engineFor, predictRound, applyRound, rebuildFrom, newRoundId, rk, mergeRounds, unionDel,
-    mergeLog, mergeRemote };
+    mergeLog, mergeRemote, scoreTuning };
 })();
