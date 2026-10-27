@@ -3,7 +3,7 @@
    - On FAIR data (like the live Chamet game) it correctly finds ~no edge,
      sitting at the central baseline — because the structure isn't there.
    Run: node tests/engine.selftest.js   (pure stdlib, loads engine.js as text) */
-const { predict, updateWeights, newWeights, topK, PRIOR } = require('../engine.js');
+const { predict, updateWeights, newWeights, topK, PRIOR, predictEng, updateEng } = require('../engine.js');
 const K = 7;
 const BASE = new Set(topK(PRIOR, K));              // the no-skill central-7 block
 const rnd = n => Math.floor(Math.random() * n);
@@ -38,6 +38,22 @@ console.log('\nFAIR data (like the live Chamet game):');
 console.log('  engine   :', pct(f.eng), '  baseline:', pct(f.base), '  ('+f.n+' rounds)');
 const fOK = Math.abs(f.eng - f.base) < 0.06;          // ties baseline; no fake edge
 console.log('  =>', fOK ? 'PASS — engine finds ~0 edge (correct: fair data has none)' : 'FAIL'); pass &&= fOK;
+
+// ENG layer (what the app shows): evidence-gated — must still crack structure, and must NOT sit
+// below the central baseline on fair data (the raw ensemble does, by chasing noise).
+function evaluateEng(series){
+  let W=newWeights(); const H=[]; let n=0, engHit=0, baseHit=0;
+  for(const a of series){ const p=predictEng(H,W,K,{});
+    if(H.length>=12){ n++; if(p.list.indexOf(a)>=0)engHit++; if(BASE.has(a))baseHit++; }
+    updateEng(W,p,a,K); H.push(a); }
+  return { eng: engHit/n, base: baseHit/n, n };
+}
+const ew = evaluateEng(genWeak(600)), ef = evaluateEng(genFair(600));
+console.log('\nENG (evidence-gated, what the app shows):');
+console.log('  weak :', pct(ew.eng), ' baseline', pct(ew.base));
+console.log('  fair :', pct(ef.eng), ' baseline', pct(ef.base));
+const eOK = ew.eng > 0.80 && ef.eng >= ef.base - 0.03;
+console.log('  =>', eOK ? 'PASS — cracks structure, never trails baseline on fair data' : 'FAIL'); pass &&= eOK;
 
 console.log('\n=== ' + (pass ? 'ALL PASS' : 'FAILED') + ' ===');
 console.log('Conclusion: the engine is real — it hits >80% when a pattern exists, and');

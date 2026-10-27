@@ -33,6 +33,21 @@
   .old .chip{background:#22120f;border:1px solid rgba(239,93,68,.55);color:#ff9d8b}
   .eng .chip{background:#101a2a;border:1px solid rgba(91,139,208,.55);color:#9fc4f0}
   .new .chip{background:#0f2018;border:1px solid rgba(34,192,138,.55);color:#7fe3c0}
+  .ai .chip{background:#1d1430;border:1px solid rgba(176,132,240,.55);color:#cdb4ff}
+  .aiPanel{margin-top:6px;padding:6px;border:1px solid rgba(176,132,240,.3);border-radius:8px;background:rgba(20,14,32,.6)}
+  .seg{display:flex;border:1px solid rgba(176,132,240,.35);border-radius:6px;overflow:hidden;margin-bottom:5px}
+  .seg div{flex:1;text-align:center;font-size:10px;padding:5px 0;color:var(--mut);cursor:pointer}
+  .seg div.on{background:rgba(176,132,240,.35);color:#fff;font-weight:700}
+  .aiBtns{display:flex;gap:5px;margin-bottom:5px}
+  .aiNote{font-size:10px;color:#cdb4ff;line-height:1.35;margin-bottom:4px;min-height:12px;user-select:text}
+  .aiNote.err{color:#ff9d8b;padding:0}
+  .aiSpend{font-size:9px;color:var(--faint);margin-bottom:5px}
+  .aiSet{display:flex;flex-direction:column;gap:4px;margin-top:5px}
+  .aiSet input,.aiSet select{width:100%;min-width:0;background:rgba(13,23,34,.9);border:1px solid rgba(91,139,208,.3);
+    color:#eaf1f8;border-radius:6px;padding:5px 7px;font:11px var(--mono);user-select:text}
+  .aiPair{display:flex;gap:5px}
+  .aiPair label{flex:1;font-size:9px;color:var(--faint)}
+  .mini.busy{opacity:.55;pointer-events:none}
   .status{font-size:11px;margin:6px 0 4px;min-height:15px;color:var(--mut);line-height:1.35}
   .status .hit{color:var(--good);font-weight:700}
   .status .miss{color:var(--bad);font-weight:700}
@@ -69,6 +84,7 @@
   <div class="body">
     <div class="prow old"><span class="lab">BET&nbsp;7</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 7"></span></div>
     <div class="prow eng"><span class="lab">ENG&nbsp;7</span><span class="chips" id="eng"></span><span class="opct" id="engPct" title="the learning engine's own picks — tracked (shadow), bet only once it earns edge"></span></div>
+    <div class="prow ai" id="aiRow" style="display:none"><span class="lab">AI&nbsp;7</span><span class="chips" id="ai"></span><span class="opct" id="aiPct" title="how often the AI's 7 contained the result (vs the central baseline on the same rounds)"></span></div>
     <div class="prow new"><span class="lab">NEW&nbsp;4</span><span class="chips" id="new"></span></div>
     <div class="trust" id="trust"></div>
     <div class="status" id="status">Tap the result that came up on the game.</div>
@@ -76,6 +92,7 @@
     <div class="modeRow"><span class="elab" id="entryLab">tap the result (0–27)</span><span class="reelPicks" id="reelPicks"></span><div class="mini" id="modeBtn">3-digit entry</div></div>
     <div class="pad" id="pad"></div>
     <div class="miniBtns">
+      <div class="mini" id="aiBtn">✦ AI</div>
       <div class="mini" id="sync">⇅ sync</div>
       <div class="mini" id="undo">undo</div>
       <div class="mini" id="exp">export</div>
@@ -86,11 +103,27 @@
       <input id="syncCode" placeholder="sync code — same on both devices" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="mini" id="syncGo">connect</div>
     </div>
+    <div class="aiPanel" id="aiPanel" style="display:none">
+      <div class="seg" id="aiMode"><div data-m="off">off</div><div data-m="demand">on demand</div><div data-m="live">live</div></div>
+      <div class="aiBtns"><div class="mini" id="aiPick">AI pick now</div><div class="mini" id="aiTune">analyze + tune ENG</div></div>
+      <div class="aiNote" id="aiNote"></div>
+      <div class="aiSpend" id="aiSpend"></div>
+      <div class="mini" id="aiSetBtn">settings</div>
+      <div class="aiSet" id="aiSet" style="display:none">
+        <input id="aiKey" type="password" placeholder="Claude API key (sk-ant-…)" autocomplete="off" spellcheck="false">
+        <input id="aiWs" placeholder="workspace ID (wrkspc_…)" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <select id="aiModel"></select>
+        <div class="aiPair"><label>budget $/mo<input id="aiBudget" type="number" min="0" step="1"></label>
+          <label>live re-tune every<input id="aiEvery" type="number" min="5" step="5"></label></div>
+        <div class="mini" id="aiSave">save</div>
+      </div>
+    </div>
     <input type="file" id="impFile" accept="application/json" hidden>
   </div>
 </div>
 <script src="engine.js"></script>
 <script src="sync.js"></script>
+<script src="ai.js"></script>
 <script>
 /* compact floating predictor — shares the sylox_livetest_v2 test with the full tool */
 const LS='sylox_livetest_v2', K_OLD=7, K_NEW=4, CONF_THR=0.15;   // CONF_THR = "the engine is sure" cutoff for the trust meter
@@ -101,7 +134,8 @@ let P=null, cur=null;
 
 function fresh(){ return {v:2,created:Date.now(),mode:'sum',Hold:[],Hnew:[],reels:[],
   Wold:newWeights(),Wnew:newWeights(),Wr:[newWeights(),newWeights(),newWeights()],
-  oH:0,oR:0,bH:0,nH:0,nR:0,streak:0,best:0,days:{},lastTs:null,rounds:[],lastExport:0,
+  oH:0,oR:0,bH:0,nH:0,nR:0,streak:0,best:0,days:{},lastTs:null,rounds:[],del:[],lastExport:0,
+  engV:2,engLog:[],aiN:0,aiH:0,aiB:0,   // engLog = timestamped ENG re-tunes (synced); ai* = AI-pick track record
   t1N:0,t1Hit:0,t1SumP:0,cHiN:0,cHiHit:0,shN:0,shH:0,   // trust meter + shadow (full-engine hits, drives do-no-harm)
   seed:'player-'+Math.floor(Math.random()*1e9).toString(36)}; }
 // record one round's top-pick confidence + whether it landed (prequential: pred was made before the result)
@@ -119,7 +153,7 @@ function blendBet(full,s){ const k=trustK(s);
   const pool=(full.pool&&typeof PRIOR!=='undefined')?full.pool.map((v,i)=>(1-k)*PRIOR[i]+k*(isFinite(v)?v:PRIOR[i])):full.pool;
   return {list:topK(pool,K_OLD), pool, fullPool:full.pool, dists:full.dists, fullList:full.list, k}; }
 function load(){ try{const s=JSON.parse(localStorage.getItem(LS));
-  if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0;
+  if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(!s.del)s.del=[]; if(!s.engLog)s.engLog=[]; if(s.lastExport==null)s.lastExport=0;
     if(!s.Wold)s.Wold=newWeights(); if(!s.Wnew)s.Wnew=newWeights();
     if(!s.reels)s.reels=[]; if(!s.Wr)s.Wr=[newWeights(),newWeights(),newWeights()]; return s; } }catch(e){} return fresh(); }
 function save(){ try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
@@ -134,49 +168,53 @@ function chipsP(arr,pool,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n
 // signal. Everything routes through blendBet's trust-gate, so a signal only sways the bet once it
 // has EARNED edge over baseline — it can never drag the bet below the central ~52%. Non-reel path
 // (fewer than 12 reel rounds) is identical to the pure-sum engine.
-function engineFor(s){
-  const full=predict(s.Hold,s.Wold,K_OLD);
-  let pool=full.pool, reel=null;
-  if(s.reels && s.reels.length>=12 && s.Wr){
-    try{ reel=predictReels(s.reels,s.Wr,K_OLD);
-      if(reel&&reel.sumDist){ let rs=0; for(const v of reel.sumDist) rs+=(isFinite(v)?v:0);
-        if(rs>0){ const out=new Array(pool.length); let t=0;
-          for(let i=0;i<pool.length;i++){ const v=(isFinite(pool[i])?pool[i]:0)+(isFinite(reel.sumDist[i])?reel.sumDist[i]/rs:0); out[i]=v; t+=v; }
-          pool=t>0?out.map(v=>v/t):pool; } } }catch(e){ reel=null; }
-  }
-  return { pool, list:topK(pool,K_OLD), dists:full.dists, reel };
+// The ENG tuning that was live at time t (AI/human re-tunes apply forward only — replay stays honest).
+function paramsAt(s,t){ let p=null; for(const e of (s.engLog||[])) if(e.t<=t) p=e; return p||{}; }
+// AI picks sway ENG only in proportion to the AI's own measured edge over the central baseline.
+function aiTrust(s){ const n=s.aiN||0; if(n<30) return 0; return Math.max(0,Math.min(1,(((s.aiH||0)-(s.aiB||0))/n)/0.05)); }
+function engineFor(s,aiPicks,t){
+  let reel=null;
+  if(s.reels && s.reels.length>=12 && s.Wr){ try{ reel=predictReels(s.reels,s.Wr,K_OLD); }catch(e){ reel=null; } }
+  const p=paramsAt(s,t==null?Date.now():t);
+  const params={signals:p.signals, ai:aiPicks?{picks:aiPicks, weight:p.aiWeight==null?0.5:p.aiWeight}:null};
+  const r=predictEng(s.Hold,s.Wold,K_OLD,params,reel&&reel.sumDist,aiTrust(s));
+  r.reel=reel; return r;
 }
-function lockRound(){
-  const eng=engineFor(P);
-  cur={ old:blendBet(eng,P), reel:eng.reel, nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
+// aiPicks: the AI's pick for THIS round (kept if lockRound re-runs before the result is tapped)
+function lockRound(aiPicks){
+  const n=P.rounds.length, keepAi=aiPicks||(cur&&cur.n===n?cur.ai:null);
+  const eng=engineFor(P,keepAi);
+  cur={ n, ai:keepAi, eng, old:blendBet(eng,P), reel:eng.reel, nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
   render();
 }
+function trackAi(o,picks,actual){ if(!picks) return; o.aiN=(o.aiN||0)+1;
+  if(picks.indexOf(actual)>=0) o.aiH=(o.aiH||0)+1; if(BASE8set.has(actual)) o.aiB=(o.aiB||0)+1; }
 function resolve(actual, reels){
   const oldHit=cur.old.list.indexOf(actual)>=0; P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
   if(P.Hold.length>=12){ P.shN=(P.shN||0)+1; if(cur.old.fullList.indexOf(actual)>=0)P.shH=(P.shH||0)+1; }  // shadow: would the full engine have hit?
-  trackTrust(P, cur.old.fullPool, actual);
-  updateWeights(P.Wold,cur.old.dists,actual,K_OLD); P.Hold.push(actual);
+  trackTrust(P, cur.old.fullPool, actual); trackAi(P, cur.ai, actual);
+  updateEng(P.Wold,cur.eng,actual,K_OLD); P.Hold.push(actual);
   if(reels && cur.reel && P.Wr){ for(let r=0;r<3;r++) updateWeights(P.Wr[r], cur.reel.per[r].dists, reels[r], 3); (P.reels=P.reels||[]).push(reels); }  // per-reel learns
   const res=cur.fair.result, ok=fairVerify(cur.fair), newHit=cur.nw.list.indexOf(res)>=0;
   P.nR++; if(newHit)P.nH++; updateWeights(P.Wnew,cur.nw.dists,res,K_NEW); P.Hnew.push(res);
   P.streak=oldHit?P.streak+1:0; if(P.streak>P.best)P.best=P.streak;
   const ts=Date.now(); P.lastTs=ts; const dk=dayKey(ts);
   const dd=P.days[dk]||(P.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oldHit)dd.oH++; if(BASE8set.has(actual))dd.bH++;
-  P.rounds.push({t:ts,s:actual,r:reels||null,oh:oldHit,nr:res,nh:newHit});
-  P._last={actual,oldHit,res,newHit,ok};
-  save(); lockRound();
+  P.rounds.push({t:ts,id:newRoundId(ts),s:actual,r:reels||null,oh:oldHit,nr:res,nh:newHit,ai:cur.ai||null});
+  P._last={actual,oldHit,res,newHit,ok,aiHit:cur.ai?cur.ai.indexOf(actual)>=0:null};
+  save(); lockRound(); aiAfterRound();
 }
 // Deterministically rebuild the full state by replaying a timestamped round log.
 // This is the single source of truth used by both undo and cross-device merge.
-function rebuildFrom(rounds, seed, created){
-  const np=fresh(); np.seed=seed; np.created=created;
+function rebuildFrom(rounds, seed, created, engLog){
+  const np=fresh(); np.seed=seed; np.created=created; np.engLog=(engLog||[]).slice();
   for(const e of rounds){
     if(e.seed) continue;   // warm-up/seed rounds retired: dropped on every rebuild so they can never re-enter via sync
-    const eng=engineFor(np); const c={ old:blendBet(eng,np), nw:predict(np.Hnew,np.Wnew,K_NEW) };
+    const eng=engineFor(np,e.ai||null,e.t); const c={ old:blendBet(eng,np), nw:predict(np.Hnew,np.Wnew,K_NEW) };
     const oh=c.old.list.indexOf(e.s)>=0; np.oR++; if(oh)np.oH++; if(BASE8set.has(e.s))np.bH++;
     if(np.Hold.length>=12){ np.shN=(np.shN||0)+1; if(eng.list.indexOf(e.s)>=0)np.shH=(np.shH||0)+1; }
-    trackTrust(np, eng.pool, e.s);
-    updateWeights(np.Wold,eng.dists,e.s,K_OLD); np.Hold.push(e.s);
+    trackTrust(np, eng.pool, e.s); trackAi(np, e.ai||null, e.s);
+    updateEng(np.Wold,eng,e.s,K_OLD); np.Hold.push(e.s);
     if(e.r && eng.reel && np.Wr){ for(let r=0;r<3;r++) updateWeights(np.Wr[r], eng.reel.per[r].dists, e.r[r], 3); np.reels.push(e.r); }  // replay per-reel learning
     const nh=c.nw.list.indexOf(e.nr)>=0; np.nR++; if(nh)np.nH++;
     updateWeights(np.Wnew,c.nw.dists,e.nr,K_NEW); np.Hnew.push(e.nr);
@@ -186,17 +224,26 @@ function rebuildFrom(rounds, seed, created){
   }
   return np;
 }
-// Union two round logs, keyed by timestamp, ordered chronologically. No round is ever lost.
-function mergeRounds(a,b){
-  const m=new Map();
-  for(const e of (a||[])) if(e&&e.t!=null) m.set(e.t,e);
-  for(const e of (b||[])) if(e&&e.t!=null && !m.has(e.t)) m.set(e.t,e);
-  return [...m.values()].sort((x,y)=>x.t-y.t);
+// Round identity: a per-round random id (two phones can tap in the same millisecond);
+// legacy rounds without one fall back to their timestamp.
+const newRoundId=ts=>ts.toString(36)+'-'+Math.random().toString(36).slice(2,8);
+const rk=e=>e.id||e.t;
+// Union two round logs, keyed by round id, ordered chronologically (ties broken by id so every
+// device replays the same order). A round is dropped only if it is in del (an undo on any device).
+function mergeRounds(a,b,del){
+  const m=new Map(), gone=new Set(del||[]);
+  for(const e of [...(a||[]),...(b||[])]) if(e&&e.t!=null&&!e.seed&&!gone.has(rk(e))&&!m.has(rk(e))) m.set(rk(e),e);
+  return [...m.values()].sort((x,y)=>(x.t-y.t)||String(rk(x)).localeCompare(String(rk(y))));
 }
+const unionDel=(a,b)=>[...new Set([...(a||[]),...(b||[])])].sort((x,y)=>x-y);
+// ENG re-tune log: union by id, chronological — both phones end up with the same tuning history
+function mergeLog(a,b){ const m=new Map(); for(const e of [...(a||[]),...(b||[])]) if(e&&e.t!=null&&!m.has(e.id||e.t)) m.set(e.id||e.t,e);
+  return [...m.values()].sort((x,y)=>x.t-y.t); }
 function undo(){
   if(!P.rounds.length) return;
-  const np=rebuildFrom(P.rounds.slice(0,-1), P.seed, P.created);
+  const np=rebuildFrom(P.rounds.slice(0,-1), P.seed, P.created, P.engLog);
   np.lastExport=Math.min(P.lastExport,np.oR);
+  np.del=unionDel(P.del,[rk(P.rounds[P.rounds.length-1])]);   // tombstone so sync can't resurrect it
   P=np; P._last=null; save(); lockRound();
 }
 // TRUST METER — is the engine's confidence EARNED? When it is >=15% sure on its single
@@ -219,7 +266,7 @@ function render(){
   const ep=$('engPct');
   if(ep){ const sN=P.shN||0;
     if(sN){ const e=Math.round((P.shH||0)/sN*100);
-      ep.innerHTML=`${e}%<small>${P.shH||0}/${sN} shadow</small>`;
+      ep.innerHTML=`${e}%<small>${P.shH||0}/${sN} · gate ${Math.round(engTrust(P.Wold)*100)}%</small>`;
       const bb=P.oR?Math.round(P.bH/P.oR*100):0;
       ep.style.color = e>=bb ? '#7fe3c0' : (e>=bb-4 ? '#ffd27f' : '#ff9d8b'); }
     else { ep.innerHTML='<small>—</small>'; ep.style.color=''; } }
@@ -229,10 +276,11 @@ function render(){
   if(op){ if(P.oR){ op.innerHTML=`${o}%<small>${P.oH}/${P.oR} hit</small>`;
       op.style.color = o>=b ? '#7fe3c0' : (o>=b-4 ? '#ffd27f' : '#ff9d8b'); }   // green=beats baseline, amber=near, red=below
     else { op.innerHTML='<small>—</small>'; op.style.color=''; } }
-  renderTrust();
+  renderTrust(); renderAi();
   const L=P._last;
   $('status').innerHTML = L
     ? (L.oldHit?`<span class="hit">✓ HIT</span> — ${L.actual} was in OUR 7. `:`<span class="miss">✗ miss</span> — result ${L.actual}. `)
+      + (L.aiHit==null?'':(L.aiHit?'AI ✓. ':'AI ✗. '))
       + `Sylox: ${L.res} ${L.newHit?'(chance hit)':'<span class="hit">evaded</span>'}.`
     : 'Tap the result that came up on the game.';
   const rec=P.rounds.slice(-5);
@@ -281,7 +329,7 @@ function exportData(){
 }
 window.__sxImport=function(jsonStr){
   try{ const s=JSON.parse(jsonStr);
-    if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0;
+    if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(!s.del)s.del=[]; if(s.lastExport==null)s.lastExport=0;
       if(!s.Wold)s.Wold=newWeights(); if(!s.Wnew)s.Wnew=newWeights();
       P=s; save(); lockRound(); return true; } }catch(e){}
   return false;
@@ -295,17 +343,21 @@ $('impFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new 
 // MERGE, never replace: take the union of this device's rounds and the remote's, then
 // replay to rebuild. So two phones / phone+PC converge to the COMBINED history and a
 // round entered on either device can never wipe the other's data.
+// Returns true if local data changed; pushes back whenever the remote lacks something we have.
 function applyRemote(s){
-  if(!s || s.v!==2 || !Array.isArray(s.rounds)) return;
-  const localN=(P.rounds||[]).length, remoteN=s.rounds.length;
-  const merged=mergeRounds(P.rounds, s.rounds);
-  if(merged.length===localN && remoteN<=localN) return;        // remote brought nothing new
-  const np=rebuildFrom(merged, P.seed||s.seed, Math.min(P.created||Date.now(), s.created||Date.now()));
-  np.lastExport=Math.min(P.lastExport||0, np.oR); np.mode=P.mode||s.mode||'sum'; np._last=P._last;
-  const weContributed = merged.length > remoteN;               // we had rounds the remote lacked
-  P=np; try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
-  lockRound();
-  if(weContributed){ try{ if(SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }  // push the superset back
+  if(!s || s.v!==2 || !Array.isArray(s.rounds)) return false;
+  const del=unionDel(P.del, s.del), merged=mergeRounds(P.rounds, s.rounds, del), log=mergeLog(P.engLog, s.engLog);
+  const keys=a=>(a||[]).map(rk).join(',');
+  const localChanged = keys(merged)!==keys(P.rounds) || del.length!==(P.del||[]).length || log.length!==(P.engLog||[]).length;
+  const remoteStale  = keys(merged)!==keys(s.rounds) || del.length!==(s.del||[]).length || log.length!==(s.engLog||[]).length;
+  if(localChanged){
+    const np=rebuildFrom(merged, P.seed||s.seed, Math.min(P.created||Date.now(), s.created||Date.now()), log);
+    np.lastExport=Math.min(P.lastExport||0, np.oR); np.mode=P.mode||s.mode||'sum'; np._last=P._last; np.del=del;
+    P=np; try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
+    lockRound();
+  }
+  if(remoteStale){ try{ if(SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }  // push the superset back
+  return localChanged;
 }
 function syncStatus(st){ const b=$('sync'); if(!b)return;
   if(!SYLOX_SYNC.active()){ b.textContent='⇅ sync'; b.style.color=''; if($('syncGo'))$('syncGo').textContent='connect'; return; }
@@ -324,6 +376,71 @@ $('syncGo').onclick=()=>{ if(SYLOX_SYNC.active()){ SYLOX_SYNC.disable(); syncSta
 $('syncCode').addEventListener('keydown',e=>{ if(e.key==='Enter') $('syncGo').click(); });
 if(SYLOX_SYNC.savedCode()) SYLOX_SYNC.enable(SYLOX_SYNC.savedCode(),()=>P,applyRemote,syncStatus);
 
+// ---- AI analyst for ENG (ai.js): off / on demand / live ----
+// on demand: buttons only. live: the AI picks every round automatically and re-tunes ENG every N rounds.
+let aiBusy={pick:false,tune:false}, aiMsg='', aiErr=false;
+function aiCtx(){
+  const n=P.aiN||0, sN=P.shN||0;
+  return { history:P.Hold.slice(), reels:(P.reels||[]).slice(),
+    stats:{ rounds:P.oR, central7_hit_rate:P.oR?+(P.bH/P.oR).toFixed(3):null,
+      eng_hit_rate:sN?+((P.shH||0)/sN).toFixed(3):null, eng_trust:+engTrust(P.Wold).toFixed(2),
+      ai_picks_tracked:n, ai_hit_rate:n?+((P.aiH||0)/n).toFixed(3):null, central7_on_ai_rounds:n?+((P.aiB||0)/n).toFixed(3):null },
+    weights:Object.fromEntries(SIGNALS.map(s=>[s,+(P.Wold[s]||0).toFixed(2)])),
+    params:paramsAt(P,Date.now()) };
+}
+function aiSay(msg,err){ aiMsg=msg; aiErr=!!err; renderAi(); }
+async function aiPickNow(){
+  if(aiBusy.pick) return; aiBusy.pick=true; const n=P.rounds.length; aiSay('AI is reading the history…');
+  try{ const r=await SYLOX_AI.predict(aiCtx());
+    if(P.rounds.length!==n){ aiSay('result came in before the AI answered — skipped'); return; }  // never attach a late pick
+    lockRound(r.picks); aiSay((r.pattern_found?'pattern: ':'no clear pattern — ')+r.note); }
+  catch(e){ aiSay(e.message,true); }
+  finally{ aiBusy.pick=false; renderAi(); }
+}
+async function aiTuneNow(){
+  if(aiBusy.tune) return; aiBusy.tune=true; aiSay('AI is analyzing all rounds…');
+  try{ const r=await SYLOX_AI.tune(aiCtx()); const t=Date.now();
+    P.engLog=mergeLog(P.engLog,[{t,id:newRoundId(t),by:'ai',signals:r.signals,aiWeight:r.aiWeight,note:r.note,n:P.rounds.length}]);
+    save(); lockRound(); aiSay('ENG re-tuned: '+r.note); }
+  catch(e){ aiSay(e.message,true); }
+  finally{ aiBusy.tune=false; renderAi(); }
+}
+function aiAfterRound(){ const c=SYLOX_AI.cfg(); if(c.mode!=='live'||!SYLOX_AI.ready()) return;
+  aiPickNow();
+  const last=(P.engLog||[]).filter(e=>e.by==='ai').pop(), since=P.rounds.length-(last?last.n||0:0);
+  if(since>=(+c.retuneEvery||25)) aiTuneNow(); }
+function renderAi(){ if(!$('aiRow')) return;
+  const c=SYLOX_AI.cfg(), on=c.mode!=='off';
+  $('aiRow').style.display=on?'flex':'none';
+  if(on){ if(cur&&cur.ai) chips(cur.ai,'ai'); else $('ai').innerHTML=`<span class="aiNote">${aiBusy.pick?'thinking…':c.mode==='live'?'waiting for next round':'tap “AI pick now”'}</span>`;
+    const n=P.aiN||0, ap=$('aiPct');
+    if(n){ const a=Math.round((P.aiH||0)/n*100), b=Math.round((P.aiB||0)/n*100);
+      ap.innerHTML=`${a}%<small>${P.aiH||0}/${n} · base ${b}%</small>`; ap.style.color=a>=b?'#7fe3c0':(a>=b-4?'#ffd27f':'#ff9d8b'); }
+    else { ap.innerHTML='<small>—</small>'; ap.style.color=''; } }
+  $('aiBtn').style.color=on?'#cdb4ff':'';
+  $('aiMode').querySelectorAll('div').forEach(d=>d.classList.toggle('on',d.dataset.m===c.mode));
+  $('aiPick').classList.toggle('busy',aiBusy.pick||!SYLOX_AI.ready()); $('aiTune').classList.toggle('busy',aiBusy.tune||!SYLOX_AI.ready());
+  const nt=$('aiNote'); nt.className='aiNote'+(aiErr?' err':'');
+  nt.textContent=aiMsg||(!c.key||!c.ws?'Open settings: add your Claude API key + workspace ID.':c.mode==='off'?'AI is off — ENG runs on its own.':'');
+  const u=SYLOX_AI.usage(), m=SYLOX_AI.MODELS[c.model];
+  const tr=Math.round(aiTrust(P)*100), lastT=(P.engLog||[]).slice(-1)[0];
+  $('aiSpend').textContent=`${m?m.label:c.model} · ${u.month}: $${u.usd.toFixed(2)} of $${c.budget} · ${u.calls} calls · AI blend into ENG ${tr}%`+(lastT?` · tuned @${lastT.n}r`:'');
+  requestAnimationFrame(reportHeight);
+}
+function aiFillSettings(){ const c=SYLOX_AI.cfg();
+  $('aiModel').innerHTML=Object.entries(SYLOX_AI.MODELS).map(([id,m])=>`<option value="${id}"${id===c.model?' selected':''}>${m.label} ($${m.in}/$${m.out} per M tok)</option>`).join('');
+  $('aiKey').value=c.key; $('aiWs').value=c.ws; $('aiBudget').value=c.budget; $('aiEvery').value=c.retuneEvery; }
+$('aiBtn').onclick=()=>{ const p=$('aiPanel'), show=p.style.display==='none'; p.style.display=show?'block':'none';
+  if(!show){ $('aiSet').style.display='none'; nativeIme(false); } renderAi(); };
+$('aiMode').querySelectorAll('div').forEach(d=>d.onclick=()=>{ SYLOX_AI.setCfg({mode:d.dataset.m}); aiSay('');
+  if(d.dataset.m==='live'&&SYLOX_AI.ready()&&!(cur&&cur.ai)) aiPickNow(); });
+$('aiPick').onclick=aiPickNow; $('aiTune').onclick=aiTuneNow;
+$('aiSetBtn').onclick=()=>{ const s=$('aiSet'), show=s.style.display==='none'; s.style.display=show?'flex':'none';
+  if(show){ aiFillSettings(); nativeIme(true); } else nativeIme(false); renderAi(); };
+$('aiSave').onclick=()=>{ SYLOX_AI.setCfg({ key:$('aiKey').value.trim(), ws:$('aiWs').value.trim(), model:$('aiModel').value,
+    budget:Math.max(0,+$('aiBudget').value||0), retuneEvery:Math.max(5,+$('aiEvery').value||25) });
+  $('aiSet').style.display='none'; nativeIme(false); aiSay('saved'); };
+
 // when embedded in the Android overlay shell (?app=1) the native bar provides drag+close
 const EMBED=new URLSearchParams(location.search).has('app');
 if(EMBED){ $('bar').style.display='none'; document.body.style.padding='0'; document.documentElement.style.background='transparent'; }
@@ -334,7 +451,10 @@ const _render=render; render=function(){ _render(); requestAnimationFrame(report
 
 try{ P=load();
   // self-clean + backfill: drop seed rounds, and (re)compute the trust meter from history if it's missing
-  if(P.rounds&&(P.rounds.some(r=>r&&r.seed)||P.t1N==null||P.shN==null)){ P=rebuildFrom(P.rounds.filter(r=>!(r&&r.seed)),P.seed,P.created); save(); }
+  // engV<2: replay once through the evidence-gated ENG so its trust reflects the existing history
+  if(P.rounds&&(P.rounds.some(r=>r&&r.seed)||P.t1N==null||P.shN==null||P.engV!==2)){
+    const keep={del:P.del, mode:P.mode, lastExport:P.lastExport};
+    P=rebuildFrom(P.rounds.filter(r=>!(r&&r.seed)),P.seed,P.created,P.engLog); Object.assign(P,keep); P.del=P.del||[]; save(); }
   // a test shared TO the Android app (via the share sheet) arrives here on open
   try{ if(window.SyloxNative&&SyloxNative.pendingImport){ const pend=SyloxNative.pendingImport(); if(pend) window.__sxImport(pend); } }catch(e){}
   buildPad(); lockRound(); reportHeight(); }

@@ -1,6 +1,8 @@
 /* Live cross-device sync via Firebase Realtime Database REST API.
    Set the SAME sync code on two devices (phone app + PC browser) and they mirror each
-   other. Only the /sync/<code> node is read/written. Last-writer-wins by a timestamp.
+   other. Only the /sync/<code> node is read/written. Every pull is MERGED by the page
+   (applyRemote unions rounds + deletions and re-pushes if the server lacks anything), so
+   simultaneous writes converge instead of last-writer-wins dropping a round.
    No SDK, no API key — the databaseURL + rules scoped to /sync are all that's needed. */
 window.SYLOX_SYNC = (function () {
   const DB = 'https://test-predictor-demo-default-rtdb.asia-southeast1.firebasedatabase.app';
@@ -29,20 +31,22 @@ window.SYLOX_SYNC = (function () {
       const r = await fetch(nodeUrl(), { cache: 'no-store' });
       if (!r.ok) { setStatus('err'); return; }
       const st = await r.json();
-      if (st && st.v === 2 && (st._sync || 0) > lastSeen + 300) {
-        lastSeen = st._sync || 0; applyRemote(st); setStatus('pulled');
-      } else setStatus('synced');
+      if (!code) return;                                   // disabled while the request was in flight
+      if (st && st.v === 2) {                              // always merge — the page decides what's new
+        lastSeen = st._sync || 0; setStatus(applyRemote(st) ? 'pulled' : 'synced');
+      } else push();                                       // empty node: seed it
     } catch (e) { setStatus('offline'); }
   }
 
   return {
-    // getStateFn(): the current state object; applyFn(remoteState): load a remote update.
+    // getStateFn(): the current state object; applyFn(remoteState): merge a remote copy in,
+    // returning true if local data changed (and calling pushSoon itself if the remote is stale).
     enable(c, getStateFn, applyFn, statusFn) {
       code = c.trim(); getState = getStateFn; applyRemote = applyFn; statusCb = statusFn || null;
       localStorage.setItem(KEY, code); lastSeen = 0;
       if (pollTimer) clearInterval(pollTimer);
       setStatus('connecting');
-      pull().then(() => { if (code) push(); });   // pull first; seed the node if empty/older
+      pull();                                      // merge first; applyFn pushes back whatever the node lacks
       pollTimer = setInterval(pull, 4000);
     },
     disable() { code = null; if (pollTimer) clearInterval(pollTimer); localStorage.removeItem(KEY); setStatus('off'); },

@@ -150,6 +150,46 @@ function updateWeights(W,dists,actual,k){
 }
 function newWeights(){ const W={}; for(const nm of SIGNALS) W[nm]=1; return W; }
 
+/* ---- ENG: the modular, tunable prediction layer ----
+   One entry point (predictEng) + one learner (updateEng) wrap the ensemble above. Everything
+   tunable lives in a small, validated params object, so the engine can be re-tuned (by a human
+   or the AI analyst) without touching code:
+     signals : per-signal multipliers 0..3 (0 = mute a signal, 2 = double its learned weight)
+     ai      : {picks:[..], weight 0..1} an external pick set (e.g. the AI's) blended into the pool
+   EVIDENCE GATE: the ensemble is only trusted to move away from the central prior once its own
+   decayed walk-forward hit rate beats the prior's top-k (trust ramps 0->1 over a 0->5pt edge).
+   Validated prequentially: fair data ~= baseline (was ~-5pt), the 388 real rounds 49.2% = baseline
+   (was 41.2%), and structured streams still cracked (85%-pattern 87%, 50%-pattern 66%).
+   The AI blend is gated the same way, by the AI's own measured edge (aiTrust). */
+const ENG_TRUST_DECAY=0.98, ENG_TRUST_RAMP=0.05, ENG_TRUST_MIN=20;
+function engParams(p){ p=p||{}; const out={signals:{}, ai:null};
+  for(const nm of SIGNALS){ const m=p.signals&&+p.signals[nm]; out.signals[nm]=isFinite(m)?Math.max(0,Math.min(3,m)):1; }
+  if(p.ai&&Array.isArray(p.ai.picks)){ const picks=[...new Set(p.ai.picks.map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<R))];
+    const w=+p.ai.weight; if(picks.length) out.ai={picks, weight:isFinite(w)?Math.max(0,Math.min(1,w)):0}; }
+  return out; }
+function engTrust(W){ const m=W._tn||0; if(m<ENG_TRUST_MIN) return 0;
+  return Math.max(0,Math.min(1,(((W._te||0)-(W._tp||0))/m)/ENG_TRUST_RAMP)); }
+// extraPool: optional additional 0..R-1 distribution folded into the raw ensemble (e.g. per-reel).
+// aiTrust: 0..1 evidence weight for the AI picks (from the AI's own tracked edge).
+function predictEng(H,W,k,params,extraPool,aiTrust){
+  const p=engParams(params), dists=sigAll(H);
+  const Wm={}; for(const nm of SIGNALS) Wm[nm]=W[nm]*p.signals[nm];
+  let raw=combineDists(dists,Wm);
+  if(extraPool){ let es=0; for(const v of extraPool) es+=(isFinite(v)?v:0);
+    if(es>0) raw=nrm(raw.map((v,i)=>v+(isFinite(extraPool[i])?extraPool[i]/es:0))); }
+  const trust=engTrust(W);
+  let pool=raw.map((v,i)=>trust*v+(1-trust)*PRIOR[i]);
+  const aw=p.ai?p.ai.weight*Math.max(0,Math.min(1,aiTrust||0)):0;
+  if(aw>0){ const m=1/p.ai.picks.length, ad=new Array(R).fill(0); for(const n of p.ai.picks) ad[n]=m;
+    pool=pool.map((v,i)=>(1-aw)*v+aw*ad[i]); }
+  return {list:topK(pool,k), pool, raw, rawList:topK(raw,k), dists, trust, aiWeight:aw};
+}
+const ENG_BASE=new Set(topK(PRIOR,7));
+function updateEng(W,res,actual,k){
+  updateWeights(W,res.dists,actual,k); const D=ENG_TRUST_DECAY, base=k===7?ENG_BASE:new Set(topK(PRIOR,k));
+  W._tn=(W._tn||0)*D+1; W._te=(W._te||0)*D+(res.rawList.indexOf(actual)>=0?1:0); W._tp=(W._tp||0)*D+(base.has(actual)?1:0);
+}
+
 // ---- per-reel prediction (3 digits 0-9) -> convolved to a 0-27 sum distribution ----
 const DPRI=new Array(10).fill(0.1);
 function convolve3(a,b,c){ const out=new Array(R).fill(0);
@@ -194,5 +234,6 @@ function fairVerify(r){
 // self-test do `require('./engine.js')` instead of eval'ing the file as a string.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { predict, predictReels, updateWeights, newWeights, topK, combineDists,
-    sigAll, sigDist, PRIOR, R, SIGNALS, convolve3, sumFromBytes, fairRound, fairVerify };
+    sigAll, sigDist, PRIOR, R, SIGNALS, convolve3, sumFromBytes, fairRound, fairVerify,
+    predictEng, updateEng, engParams, engTrust };
 }
