@@ -26,7 +26,20 @@ android {
         // CI passes an incrementing VERSION_CODE so signed updates install in place.
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInteger()
         versionName = (System.getenv("VERSION_NAME") ?: "1.0")
+        // Built-in Claude key for the AI button: injected by CI from the ANTHROPIC_API_KEY repo secret
+        // (never committed). XOR-masked so it isn't a plain string in the APK; empty when not provided.
+        def aiKey = System.getenv("AI_KEY") ?: ""
+        def mask = "sylox-overlay"
+        def kb = aiKey.getBytes("UTF-8")
+        def sb = new StringBuilder()
+        for (int i = 0; i < kb.length; i++) {
+            int v = ((kb[i] as int) ^ (mask.charAt(i % mask.length()) as int)) & 0xff
+            sb.append(String.format("%02x", v))
+        }
+        def masked = sb.toString()
+        buildConfigField "String", "AI_KEY_X", "\"" + masked + "\""
     }
+    buildFeatures { buildConfig true }
 
     buildTypes {
         debug {

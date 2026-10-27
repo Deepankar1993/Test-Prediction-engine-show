@@ -341,7 +341,9 @@ function renderAi(){ if(!$('aiRow')) return;
 }
 function aiFillSettings(){ const c=SYLOX_AI.cfg();
   $('aiModel').innerHTML=Object.entries(SYLOX_AI.MODELS).map(([id,m])=>`<option value="${id}"${id===c.model?' selected':''}>${m.label} ($${m.in}/$${m.out} per M tok)</option>`).join('');
-  $('aiKey').value=c.key; $('aiWs').value=c.ws; $('aiBudget').value=c.budget; $('aiEvery').value=c.retuneEvery; }
+  $('aiKey').value=c.builtIn?'':c.key;   // the built-in key is never shown or copied into storage
+  $('aiKey').placeholder=c.builtIn?'using the app’s built-in key (type one to override)':'Claude API key (sk-ant-…)';
+  $('aiWs').value=c.ws; $('aiBudget').value=c.budget; $('aiEvery').value=c.retuneEvery; }
 $('aiBtn').onclick=()=>{ const p=$('aiPanel'), show=p.style.display==='none'; p.style.display=show?'block':'none';
   if(!show){ $('aiSet').style.display='none'; nativeIme(false); } renderAi(); };
 $('aiMode').querySelectorAll('div').forEach(d=>d.onclick=()=>{ SYLOX_AI.setCfg({mode:d.dataset.m}); aiSay('');

@@ -21,8 +21,21 @@ window.SYLOX_AI = (function () {
   const read = (k, d) => { try { return Object.assign({}, d, JSON.parse(localStorage.getItem(k)) || {}); } catch (e) { return Object.assign({}, d); } };
   const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
   const month = () => new Date().toISOString().slice(0, 7);
-  function cfg() { return read(CFG_KEY, DEFAULTS); }
-  function setCfg(patch) { const c = Object.assign(cfg(), patch); write(CFG_KEY, c); return c; }
+  // The Android app can carry a built-in key (baked in from a private repo secret, handed over by the
+  // native bridge). A key typed into settings always wins; with a built-in key AI defaults to on demand.
+  let builtIn = null;
+  function builtInKey() {
+    if (builtIn === null) { builtIn = ''; try { if (window.SyloxNative && SyloxNative.aiKey) builtIn = String(SyloxNative.aiKey() || ''); } catch (e) {} }
+    return builtIn;
+  }
+  function cfg() {
+    const c = read(CFG_KEY, DEFAULTS), saved = (() => { try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch (e) { return {}; } })();
+    c.builtIn = !c.key && !!builtInKey();
+    if (c.builtIn) { c.key = builtInKey(); if (saved.mode == null) c.mode = 'demand'; }
+    return c;
+  }
+  // never persist the built-in key into storage — only what the user actually typed/chose
+  function setCfg(patch) { const c = Object.assign(read(CFG_KEY, DEFAULTS), patch); write(CFG_KEY, c); return cfg(); }
   function usage() { const u = read(USE_KEY, { month: month(), usd: 0, calls: 0 }); return u.month === month() ? u : { month: month(), usd: 0, calls: 0 }; }
   // workspace ID is only needed for organization-scoped keys; workspace-scoped keys work without it
   function ready() { const c = cfg(); return !!(c.key && c.mode !== 'off'); }

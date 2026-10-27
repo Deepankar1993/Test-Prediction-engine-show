@@ -59,6 +59,7 @@ class OverlayService : Service() {
     private val lp = WindowManager.LayoutParams()
     private var root: View? = null
     private var web: WebView? = null
+    @Volatile private var pageUrl = ""
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -143,7 +144,11 @@ class OverlayService : Service() {
             // ALWAYS pull the latest UI/logic from GitHub Pages (this is the whole point of
             // the WebView shell). LOAD_DEFAULT cached engine.js, which froze old behaviour.
             settings.cacheMode = WebSettings.LOAD_NO_CACHE
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    pageUrl = url ?: ""   // the built-in AI key is only handed to our own overlay page
+                }
+            }
             addJavascriptInterface(Bridge(), "SyloxNative")
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(430)
@@ -214,6 +219,21 @@ class OverlayService : Service() {
         // The web calls this to make the window focusable only while entering text, then restore.
         @JavascriptInterface
         fun imeFocus(focus: Boolean) { setImeFocus(focus) }
+
+        // Built-in Claude key for the AI button (baked in at build time from a repo secret, masked).
+        // Only returned to our own overlay page on GitHub Pages; "" if this build has no key.
+        @JavascriptInterface
+        fun aiKey(): String {
+            if (!pageUrl.startsWith(FULL_URL)) return ""
+            val hex = BuildConfig.AI_KEY_X; if (hex.isEmpty()) return ""
+            val mask = "sylox-overlay"
+            val out = ByteArray(hex.length / 2) { i ->
+                (hex.substring(i * 2, i * 2 + 2).toInt(16) xor mask[i % mask.length].code).toByte() }
+            return String(out, Charsets.UTF_8)
+        }
+
+        @JavascriptInterface
+        fun appVersion(): String = Updater.installedName(this@OverlayService)
 
         @JavascriptInterface
         fun openFull() { startExternal(Intent(Intent.ACTION_VIEW, Uri.parse(FULL_URL))) }

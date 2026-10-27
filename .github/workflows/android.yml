@@ -50,6 +50,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: "1.0.${{ github.run_number }}"
+          AI_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # baked into the app for the AI button (masked)
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Stage APK
