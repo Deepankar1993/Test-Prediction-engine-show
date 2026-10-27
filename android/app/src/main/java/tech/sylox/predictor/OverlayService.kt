@@ -69,6 +69,7 @@ class OverlayService : Service() {
         addOverlay()
         live = this
         setRunning(true)   // an update that kills us while this is true → UpdateReceiver re-opens
+        Updater.schedule(this)   // self-update from GitHub Releases while the window is up
     }
 
     private fun dp(v: Int): Int = TypedValue.applyDimension(
@@ -261,6 +262,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         if (live === this) live = null
+        Updater.cancel()
         root?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         root = null
         web = null

@@ -55,6 +55,21 @@ class MainActivity : Activity() {
             }
         })
 
+        // --- self-update from GitHub Releases ---
+        val updStatus = TextView(this).apply {
+            text = "App v${Updater.installedName(this@MainActivity)} · checking for updates…"
+            setTextColor(Color.parseColor("#8499ad"))
+            textSize = 13f
+            setPadding(0, pad, 0, pad / 3)
+        }
+        root.addView(updStatus)
+        root.addView(Button(this).apply {
+            text = "Check for app update"
+            setOnClickListener { Updater.check(this@MainActivity, manual = true) { updStatus.text = it } }
+        })
+        // check on every app open (only the button jumps to the "Install unknown apps" setting)
+        Updater.check(this, manual = true, askPermission = false) { updStatus.text = it }
+
         setContentView(
             root,
             ViewGroup.LayoutParams(

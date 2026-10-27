@@ -13,6 +13,15 @@ https://github.com/Deepankar1993/Test-Prediction-engine-show/releases/download/a
 - The APK is built automatically by GitHub Actions (`.github/workflows/android.yml`) and
   published to the **`app-latest`** release on every change to `android/**`.
 
+## Auto-update (native app)
+- CI also publishes `version.json` to the `app-latest` release (after the APK). The app checks it
+  on open, when the floating window starts, and every 3 h while it runs (`Updater.kt`).
+- A newer build is downloaded and installed with PackageInstaller. Android only accepts it if it is
+  signed with the same release key. The **first** self-update asks once to allow
+  “Install unknown apps” for Sylox and to tap Install; after that, on Android 12+, updates
+  install silently. `UpdateReceiver` re-opens the floating window afterwards.
+- Manual: open the app → **Check for app update**.
+
 ## Install + use (Android only)
 1. On the phone, open the download link and install the APK. You'll need to allow
    **“Install unknown apps”** for your browser (one-time).

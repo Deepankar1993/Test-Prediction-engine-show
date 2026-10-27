@@ -69,3 +69,14 @@ jobs:
             grant "Display over other apps". The prediction UI updates automatically from GitHub Pages.
           prerelease: true
           files: sylox-predictor.apk
+
+      # The app's self-updater polls this. Uploaded AFTER the APK so a phone can never see a new
+      # versionCode while the old APK is still the release asset.
+      - name: Write version.json
+        run: echo "{\"versionCode\":${{ github.run_number }},\"versionName\":\"1.0.${{ github.run_number }}\"}" > version.json
+
+      - name: Publish version.json (self-update signal)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-latest
+          files: version.json
