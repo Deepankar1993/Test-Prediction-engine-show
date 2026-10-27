@@ -99,22 +99,23 @@ class OverlayService : Service() {
         val handle = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#E60F1925"))
-            setPadding(dp(10), dp(6), dp(6), dp(6))
+            setBackgroundColor(Color.parseColor("#E60E141E"))
+            setPadding(dp(10), dp(2), dp(4), dp(2))   // slim strip: the web HUD below carries the content
         }
         handle.addView(TextView(this).apply {
-            text = "⋮⋮  SYLOX  ·  drag"
-            setTextColor(Color.parseColor("#5b8bd0"))
-            textSize = 12f
+            text = "⋮⋮  Sylox · drag"
+            setTextColor(Color.parseColor("#8a9bb0"))
+            textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
         handle.addView(Button(this).apply {
             text = "×"
             setTextColor(Color.parseColor("#ff9d8b"))
             setBackgroundColor(Color.parseColor("#552a1916"))
-            textSize = 16f
+            textSize = 14f
             minimumWidth = dp(30)
-            minimumHeight = dp(28)
+            minimumHeight = dp(22)
+            minHeight = dp(22); minWidth = dp(30)   // Button's own min* defaults (~48dp) override the View ones
             setPadding(0, 0, 0, 0)
             setOnClickListener { setRunning(false); stopSelf() }   // explicit close → don't auto-reopen
         })

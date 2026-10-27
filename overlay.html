@@ -5,103 +5,124 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Sylox · floating predictor</title>
 <style>
-  :root{--good:#22c08a;--bad:#ef5d44;--steel:#5b8bd0;--mut:#9fb2c4;--faint:#6b8095;
-    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  /* Compact HUD that floats over a live game. One loud element — the BET strip, shaded by the
+     engine's confidence — everything else small and quiet so the game stays visible. */
+  :root{--glass:rgba(14,20,30,.88);--line:rgba(142,197,255,.16);--ink:#e8eef5;--mut:#8a9bb0;--faint:#5f7186;
+    --bet:255,176,84;--eng:142,197,255;--ai:196,168,255;--new:127,217,181;--hit:#3ddc97;--miss:#ff7a70;
+    --ui:Roboto,"Segoe UI",system-ui,-apple-system,sans-serif}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
   html,body{background:transparent}
-  body{font-family:var(--mono);color:#eaf1f8;padding:5px}
-  .ov{max-width:340px;margin:0 auto;background:rgba(11,17,24,.82);border:1px solid rgba(91,139,208,.45);
-    border-radius:13px;backdrop-filter:blur(2px);box-shadow:0 6px 22px rgba(0,0,0,.5);overflow:hidden}
-  .bar{display:flex;align-items:center;gap:6px;padding:6px 9px;background:rgba(15,25,37,.9);
-    border-bottom:1px solid rgba(91,139,208,.25);font-size:11px;letter-spacing:.04em;color:var(--steel);font-weight:600}
-  .bar .grip{color:var(--faint);font-weight:400}
-  .bar .st{margin-left:auto;color:var(--mut);font-weight:400;font-size:10.5px}
-  .bar .x{background:rgba(40,30,30,.8);border:1px solid rgba(239,93,68,.4);color:#ff9d8b;
-    width:22px;height:22px;border-radius:7px;font-size:14px;line-height:1;cursor:pointer}
-  .body{padding:8px 9px 9px}
-  .prow{display:flex;align-items:center;gap:6px;margin-bottom:5px}
-  .prow .lab{font-size:9.5px;letter-spacing:.08em;color:var(--faint);min-width:26px}
-  .chips{display:flex;gap:4px;flex-wrap:wrap;flex:1}
-  .opct{font-size:10px;font-weight:700;color:var(--mut);white-space:nowrap;min-width:30px;text-align:right}
-  .opct small{font-size:8px;font-weight:400;color:var(--faint);display:block;line-height:1}
-  .trust{font-size:9.5px;color:var(--mut);margin:0 0 5px;line-height:1.35}
-  .trust .tlab{font-size:8px;letter-spacing:.08em;color:var(--faint);text-transform:uppercase;margin-right:5px}
-  .trust b{font-weight:800}
-  .trust small{opacity:.65;font-size:8.5px}
-  .chip{font-size:13px;font-weight:700;min-width:24px;text-align:center;padding:3px 4px;border-radius:6px}
-  .chip small{display:block;font-size:8px;font-weight:600;opacity:.7;line-height:1;margin-top:1px}
-  .old .chip{background:#22120f;border:1px solid rgba(239,93,68,.55);color:#ff9d8b}
-  .eng .chip{background:#101a2a;border:1px solid rgba(91,139,208,.55);color:#9fc4f0}
-  .new .chip{background:#0f2018;border:1px solid rgba(34,192,138,.55);color:#7fe3c0}
-  .ai .chip{background:#1d1430;border:1px solid rgba(176,132,240,.55);color:#cdb4ff}
-  .aiPanel{margin-top:6px;padding:6px;border:1px solid rgba(176,132,240,.3);border-radius:8px;background:rgba(20,14,32,.6)}
-  .seg{display:flex;border:1px solid rgba(176,132,240,.35);border-radius:6px;overflow:hidden;margin-bottom:5px}
-  .seg div{flex:1;text-align:center;font-size:10px;padding:5px 0;color:var(--mut);cursor:pointer}
-  .seg div.on{background:rgba(176,132,240,.35);color:#fff;font-weight:700}
-  .aiBtns{display:flex;gap:5px;margin-bottom:5px}
-  .aiNote{font-size:10px;color:#cdb4ff;line-height:1.35;margin-bottom:4px;min-height:12px;user-select:text}
-  .aiNote.err{color:#ff9d8b;padding:0}
+  body{font-family:var(--ui);color:var(--ink);padding:5px;font-variant-numeric:tabular-nums}
+  .ov{max-width:340px;margin:0 auto;background:var(--glass);border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden}
+  .bar{display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--mut)}
+  .bar .st{margin-left:auto;font-size:10.5px}
+  .bar .x{background:none;border:1px solid rgba(255,122,112,.4);color:var(--miss);width:20px;height:20px;border-radius:6px;font-size:13px;line-height:1}
+  .body{padding:7px 7px 6px}
+  button,.mini{font-family:var(--ui)}
+
+  /* prediction rows */
+  .row{display:grid;grid-template-columns:30px 1fr 38px;align-items:center;gap:6px}
+  .row+.row{margin-top:4px}
+  .row .lab{font-size:10px;color:var(--mut);line-height:1.1}
+  .row .lab i{display:block;font-style:normal;font-size:8.5px;color:var(--faint)}
+  .pct{font-size:12px;font-weight:700;text-align:right;line-height:1.05;color:var(--mut)}
+  .pct small{display:block;font-size:8.5px;font-weight:400;color:var(--faint)}
+  .strip{display:flex;gap:2px}
+  .strip .c{flex:1;text-align:center;font-weight:800;border-radius:3px;min-width:0}
+  .strip.bet .c{font-size:17px;padding:5px 0 4px;color:#1b1206;background:rgba(var(--bet),var(--a,.6))}
+  .strip.bet .c:first-child{border-radius:7px 3px 3px 7px} .strip.bet .c:last-child{border-radius:3px 7px 7px 3px}
+  .strip.bet .c.lo{color:rgb(var(--bet))}
+  .strip.eng .c{font-size:12.5px;padding:3px 0;color:rgb(var(--eng));background:rgba(var(--eng),calc(var(--a,.5)*.28));border:1px solid rgba(var(--eng),.22)}
+  .strip.ai .c{font-size:12.5px;padding:3px 0;color:rgb(var(--ai));background:rgba(var(--ai),.12);border:1px solid rgba(var(--ai),.25)}
+  .gate{display:inline-block;margin-top:2px;font-size:8.5px;padding:0 4px;border-radius:4px;color:var(--faint);border:1px solid var(--line)}
+  .gate.on{color:rgb(var(--bet));border-color:rgba(var(--bet),.5)}
+  .sub{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:10.5px;color:var(--mut);white-space:nowrap;overflow:hidden}
+  .sub b{font-weight:700}
+  .sub .new b{color:rgb(var(--new))} .sub .new{flex:1;overflow:hidden;text-overflow:ellipsis}
+  #ai{display:contents}
+
+  /* result line */
+  .res{display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);min-height:22px}
+  .status{flex:1;font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .status .hit{color:var(--hit);font-weight:700} .status .miss{color:var(--miss);font-weight:700}
+  .recent{display:flex;gap:2px}
+  .recent .rv{min-width:19px;text-align:center;font-size:10.5px;padding:1px 3px;border-radius:4px;color:var(--faint);background:rgba(255,255,255,.04)}
+  .recent .rv.h{color:var(--hit)}
+  .recent .rv.now{color:var(--ink);box-shadow:inset 0 0 0 1px rgba(var(--eng),.6)}
+  .fold{background:none;border:0;color:var(--mut);font-size:13px;width:22px;height:22px;border-radius:6px}
+  .fold:active{background:rgba(255,255,255,.08)}
+
+  /* entry */
+  .entry{margin-top:6px}
+  .reelLine{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--mut);margin-bottom:4px}
+  .reelLine .reelPicks{font-size:13px;font-weight:700;color:rgb(var(--bet))}
+  .reelLine .reelPicks .dim{color:var(--faint);font-weight:400}
+  .pad{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .pad .n{font-size:13.5px;font-weight:600;height:29px;border-radius:6px;background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.06);color:var(--ink);cursor:pointer;font-family:var(--ui)}
+  .pad .n.ctr{background:rgba(var(--bet),.09);border-color:rgba(var(--bet),.18)}
+  .pad .n:active{background:rgb(var(--eng));color:#08121f;transform:scale(.94)}
+  .pad.reels{grid-template-columns:repeat(10,1fr)}
+
+  /* toolbar + panels */
+  .tools{display:flex;gap:4px;margin-top:6px}
+  .mini{flex:1;font-size:10.5px;padding:5px 0;border-radius:6px;background:rgba(255,255,255,.045);
+    border:1px solid rgba(255,255,255,.07);color:var(--mut);cursor:pointer;text-align:center}
+  .mini:active{background:rgba(255,255,255,.12)}
+  .mini.busy{opacity:.5;pointer-events:none}
+  .menu{display:flex;gap:4px;margin-top:4px}
+  .err{color:var(--miss);font-size:11px;padding:10px}
+  .syncRow{display:flex;gap:4px;margin-top:5px}
+  .syncRow input,.aiSet input,.aiSet select{flex:1;width:100%;min-width:0;background:rgba(0,0,0,.35);border:1px solid var(--line);
+    color:var(--ink);font:11px var(--ui);padding:6px 7px;border-radius:6px;outline:none;user-select:text}
+  .aiPanel{margin-top:5px;padding:6px;border:1px solid rgba(var(--ai),.25);border-radius:8px;background:rgba(var(--ai),.05)}
+  .seg{display:flex;border:1px solid rgba(var(--ai),.3);border-radius:6px;overflow:hidden;margin-bottom:5px}
+  .seg div{flex:1;text-align:center;font-size:10.5px;padding:5px 0;color:var(--mut);cursor:pointer}
+  .seg div.on{background:rgba(var(--ai),.3);color:#fff;font-weight:700}
+  .aiBtns{display:flex;gap:4px;margin-bottom:5px}
+  .aiNote{font-size:10.5px;color:rgb(var(--ai));line-height:1.35;margin-bottom:4px;min-height:12px;user-select:text}
+  .aiNote.err{color:var(--miss);padding:0}
   .aiSpend{font-size:9px;color:var(--faint);margin-bottom:5px}
   .aiSet{display:flex;flex-direction:column;gap:4px;margin-top:5px}
-  .aiSet input,.aiSet select{width:100%;min-width:0;background:rgba(13,23,34,.9);border:1px solid rgba(91,139,208,.3);
-    color:#eaf1f8;border-radius:6px;padding:5px 7px;font:11px var(--mono);user-select:text}
-  .aiPair{display:flex;gap:5px}
+  .aiPair{display:flex;gap:4px}
   .aiPair label{flex:1;font-size:9px;color:var(--faint)}
-  .mini.busy{opacity:.55;pointer-events:none}
-  .status{font-size:11px;margin:6px 0 4px;min-height:15px;color:var(--mut);line-height:1.35}
-  .status .hit{color:var(--good);font-weight:700}
-  .status .miss{color:var(--bad);font-weight:700}
-  .recent{display:flex;align-items:center;gap:4px;margin-bottom:7px;font-size:10px;color:var(--faint)}
-  .recent .rl{letter-spacing:.06em}
-  .recent .rv{min-width:19px;text-align:center;padding:2px 4px;border-radius:4px;
-    background:rgba(13,23,34,.9);border:1px solid rgba(91,139,208,.2);color:var(--mut)}
-  .recent .rv.h{border-color:rgba(34,192,138,.5);color:var(--good)}
-  .recent .rv.now{outline:1.5px solid var(--steel)}
-  .pad{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-  .pad .n{font-size:13px;font-weight:600;padding:8px 0;border-radius:7px;background:rgba(22,33,47,.92);
-    border:1px solid rgba(91,139,208,.3);color:#eaf1f8;cursor:pointer;transition:.08s}
-  .pad .n:active{background:var(--steel);color:#06121f;transform:scale(.94)}
-  .modeRow{display:flex;align-items:center;gap:6px;margin:2px 0 4px}
-  .modeRow .elab{font-size:9.5px;color:var(--faint);flex:0 0 auto}
-  .modeRow .reelPicks{flex:1;font-size:12px;color:#ff9d8b;font-weight:700}
-  .modeRow .reelPicks .dim{color:var(--faint);font-weight:400}
-  .modeRow #modeBtn{flex:0 0 auto;font-size:9.5px;padding:4px 7px}
-  .miniBtns{display:flex;gap:5px;margin-top:7px}
-  .mini{flex:1;font-size:10px;padding:5px 0;border-radius:6px;background:rgba(15,25,37,.85);
-    border:1px solid rgba(91,139,208,.25);color:var(--mut);cursor:pointer;text-align:center}
-  .err{color:var(--bad);font-size:11px;padding:10px}
-  .syncRow{display:flex;gap:5px;margin-top:6px}
-  .syncRow input{flex:1;min-width:0;background:rgba(13,23,34,.9);border:1px solid rgba(91,139,208,.3);
-    color:#eaf1f8;font-family:var(--mono);font-size:11px;padding:6px 7px;border-radius:6px;outline:none}
+  .folded .entry,.folded .tools,.folded .menu,.folded .row.eng,.folded .sub,.folded .syncRow,.folded .aiPanel{display:none!important}
+  @media (prefers-reduced-motion:reduce){.pad .n:active{transform:none}}
 </style>
 </head>
 <body>
 <div class="ov" id="ov">
   <div class="bar" id="bar">
-    <span class="grip">⋮⋮</span> SYLOX <span class="st" id="st"></span>
+    <span>Sylox</span><span class="st" id="st"></span>
     <button class="x" id="x" title="close">×</button>
   </div>
   <div class="body">
-    <div class="prow old"><span class="lab">BET&nbsp;7</span><span class="chips" id="old"></span><span class="opct" id="oldPct" title="how often the actual result landed in our 7"></span></div>
-    <div class="prow eng"><span class="lab">ENG&nbsp;7</span><span class="chips" id="eng"></span><span class="opct" id="engPct" title="the learning engine's own picks — tracked (shadow), bet only once it earns edge"></span></div>
-    <div class="prow ai" id="aiRow" style="display:none"><span class="lab">AI&nbsp;7</span><span class="chips" id="ai"></span><span class="opct" id="aiPct" title="how often the AI's 7 contained the result (vs the central baseline on the same rounds)"></span></div>
-    <div class="prow new"><span class="lab">NEW&nbsp;4</span><span class="chips" id="new"></span></div>
-    <div class="trust" id="trust"></div>
-    <div class="status" id="status">Tap the result that came up on the game.</div>
-    <div class="recent" id="recent"></div>
-    <div class="modeRow"><span class="elab" id="entryLab">tap the result (0–27)</span><span class="reelPicks" id="reelPicks"></span><div class="mini" id="modeBtn">3-digit entry</div></div>
-    <div class="pad" id="pad"></div>
-    <div class="miniBtns">
+    <div class="row bet"><span class="lab">Bet<i id="trust">safe</i></span><div class="strip bet" id="old"></div><span class="pct" id="oldPct" title="how often the result landed in BET 7"></span></div>
+    <div class="row eng"><span class="lab">Eng</span><div class="strip eng" id="eng"></div><span class="pct" id="engPct" title="the engine's own picks — scored every round, only bet once they beat the baseline"></span></div>
+    <div class="row eng" id="aiRow" style="display:none"><span class="lab">AI</span><div class="strip ai"><span id="ai"></span></div><span class="pct" id="aiPct" title="how often the AI's 7 held the result (vs the central baseline on the same rounds)"></span></div>
+    <div class="sub"><span class="new">New <b id="new"></b> <span id="newPct"></span></span></div>
+    <div class="res"><span class="status" id="status">Tap the result when it lands.</span><span class="recent" id="recent"></span>
+      <button class="fold" id="fold" title="collapse / expand">▾</button></div>
+    <div class="entry">
+      <div class="reelLine" id="reelLine" style="display:none"><span id="entryLab">reel digits</span><span class="reelPicks" id="reelPicks"></span></div>
+      <div class="pad" id="pad"></div>
+    </div>
+    <div class="tools">
       <div class="mini" id="aiBtn">✦ AI</div>
       <div class="mini" id="sync">⇅ sync</div>
-      <div class="mini" id="undo">undo</div>
+      <div class="mini" id="undo">↶ undo</div>
+      <div class="mini" id="more">≡ more</div>
+    </div>
+    <div class="menu" id="menu" style="display:none">
+      <div class="mini" id="modeBtn">3-digit entry</div>
       <div class="mini" id="exp">export</div>
       <div class="mini" id="imp">import</div>
-      <div class="mini" id="open">full ↗</div>
+      <div class="mini" id="open">full tool</div>
     </div>
     <div class="syncRow" id="syncRow" style="display:none">
       <input id="syncCode" placeholder="sync code — same on both devices" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <div class="mini" id="syncGo">connect</div>
+      <div class="mini" id="syncGo" style="flex:0 0 70px">connect</div>
     </div>
     <div class="aiPanel" id="aiPanel" style="display:none">
       <div class="seg" id="aiMode"><div data-m="off">off</div><div data-m="demand">on demand</div><div data-m="live">live</div></div>
@@ -139,11 +160,11 @@ function load(){ try{ const s=normalize(JSON.parse(localStorage.getItem(LS))); i
 function save(){ try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
   try{ if(window.SYLOX_SYNC&&SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }
 
-function chips(arr,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>`<span class="chip">${n}</span>`).join(''); }
-// like chips() but shows each number's model probability (confidence) underneath it
+function chips(arr,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>`<span class="c">${Number(n)|0}</span>`).join(''); }
+// a strip cell per pick, shaded by its model probability (2%..10% -> faint..solid); exact % on long-press title
 function chipsP(arr,pool,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>{
-  const p=(pool&&isFinite(pool[n]))?Math.round(pool[n]*100):0;
-  return `<span class="chip">${n}<small>${p}%</small></span>`; }).join(''); }
+  const p=(pool&&isFinite(pool[n]))?pool[n]:0, a=Math.max(.22,Math.min(1,(p-.02)/.08));
+  return `<span class="c${a<.45?' lo':''}" style="--a:${a.toFixed(2)}" title="${Math.round(p*100)}%">${Number(n)|0}</span>`; }).join(''); }
 // aiPicks: the AI's pick for THIS round (kept if lockRound re-runs before the result is tapped)
 function lockRound(aiPicks){
   const n=P.rounds.length, keepAi=aiPicks||(cur&&cur.n===n?cur.ai:null);
@@ -161,61 +182,42 @@ function undo(){
   np.del=unionDel(P.del,[rk(P.rounds[P.rounds.length-1])]);   // tombstone so sync can't resurrect it
   P=np; P._last=null; save(); lockRound();
 }
-// TRUST METER — is the engine's confidence EARNED? When it is >=15% sure on its single
-// top number, how often does that number actually come up? On fair data this stays ~7%
-// (false confidence); when a real pattern exists it climbs well above the ~7.5% fair top-1.
-function renderTrust(){
-  const t=$('trust'); if(!t) return;
-  const hiN=P.cHiN||0, hiH=P.cHiHit||0;
-  if(hiN<8){ t.innerHTML=`<span class="tlab">trust</span> building… <small>${hiN}/8 confident calls</small>`; t.style.color='var(--faint)'; return; }
-  const y=Math.round(hiH/hiN*100), claim=P.t1N?Math.round(P.t1SumP/P.t1N*100):0;
-  t.innerHTML=`<span class="tlab">trust</span> ≥15% sure → lands <b>${y}%</b> <small>(${hiH}/${hiN} · top pick claims ~${claim}%)</small>`;
-  const k=trustK(P);   // override the line above with the do-no-harm bet mode (this runs last, so it wins)
-  if(k<=0){ t.innerHTML=`<span class="tlab">safe</span> betting central-7 baseline <small>(engine not beating it yet; lands ${Math.round(hiH/hiN*100)}% when sure)</small>`; t.style.color='var(--mut)'; }
-  else { t.innerHTML=`<span class="tlab">edge ${Math.round(k*100)}%</span> blending in the engine <small>(${hiH}/${hiN} confident hits)</small>`; t.style.color='#7fe3c0'; }
-}
 function render(){
-  chipsP(cur.old.list,cur.old.pool,'old'); chips(cur.nw.list,'new');
-  // the engine's OWN picks, always visible (shadow-tracked; folded into the bet once earned)
-  chipsP(cur.old.fullList,cur.old.fullPool,'eng');
-  const ep=$('engPct');
-  if(ep){ const sN=P.shN||0;
-    if(sN){ const e=Math.round((P.shH||0)/sN*100);
-      ep.innerHTML=`${e}%<small>${P.shH||0}/${sN} · gate ${Math.round(engTrust(P.Wold)*100)}%</small>`;
-      const bb=P.oR?Math.round(P.bH/P.oR*100):0;
-      ep.style.color = e>=bb ? '#7fe3c0' : (e>=bb-4 ? '#ffd27f' : '#ff9d8b'); }
-    else { ep.innerHTML='<small>—</small>'; ep.style.color=''; } }
-  const o=P.oR?Math.round(P.oH/P.oR*100):0, b=P.oR?Math.round(P.bH/P.oR*100):0;
-  $('st').textContent=`${P.oR}r · ${o}% (base ${b}%) · ✦${P.streak}`;
-  const op=$('oldPct');
-  if(op){ if(P.oR){ op.innerHTML=`${o}%<small>${P.oH}/${P.oR} hit</small>`;
-      op.style.color = o>=b ? '#7fe3c0' : (o>=b-4 ? '#ffd27f' : '#ff9d8b'); }   // green=beats baseline, amber=near, red=below
-    else { op.innerHTML='<small>—</small>'; op.style.color=''; } }
-  renderTrust(); renderAi();
+  chipsP(cur.old.list,cur.old.pool,'old'); chipsP(cur.old.fullList,cur.old.fullPool,'eng');
+  $('new').textContent=cur.nw.list.slice().sort((a,b)=>a-b).join(' ');
+  const o=P.oR?Math.round(P.oH/P.oR*100):0, b=P.oR?Math.round(P.bH/P.oR*100):0, sN=P.shN||0, e=sN?Math.round((P.shH||0)/sN*100):0;
+  const tone=(x,y)=>x>=y?'var(--hit)':(x>=y-4?'#ffd27f':'var(--miss)');   // green beats baseline, amber near, red below
+  $('st').textContent=`${P.oR} rounds · base ${b}%`;
+  $('oldPct').innerHTML=P.oR?`${o}%<small>${P.oH}/${P.oR}</small>`:'<small>—</small>'; $('oldPct').style.color=P.oR?tone(o,b):'';
+  $('engPct').innerHTML=sN?`${e}%<small>${P.shH||0}/${sN}</small>`:'<small>—</small>'; $('engPct').style.color=sN?tone(e,b):'';
+  const k=trustK(P), g=Math.round(engTrust(P.Wold)*100);
+  $('trust').textContent=k>0?`edge ${Math.round(k*100)}%`:'safe'; $('trust').title=k>0?'BET 7 is blending in the engine (it has beaten the baseline)':'BET 7 plays the central baseline until the engine proves an edge';
+  $('trust').className=k>0?'gate on':'';
+  $('engPct').title=`engine's own picks: ${P.shH||0}/${sN} hits; confidence gate ${g}% (0% = still on the central baseline)`;
+  $('newPct').innerHTML=P.nR?`· lands ${Math.round(P.nH/P.nR*100)}% <span style="color:var(--faint)">(Sylox evades)</span>`:'';
+  renderAi();
   const L=P._last;
   $('status').innerHTML = L
-    ? (L.oldHit?`<span class="hit">✓ HIT</span> — ${L.actual} was in OUR 7. `:`<span class="miss">✗ miss</span> — result ${L.actual}. `)
-      + (L.aiHit==null?'':(L.aiHit?'AI ✓. ':'AI ✗. '))
-      + `Sylox: ${L.res} ${L.newHit?'(chance hit)':'<span class="hit">evaded</span>'}.`
-    : 'Tap the result that came up on the game.';
+    ? (L.oldHit?`<span class="hit">✓ ${L.actual}</span> in Bet`:`<span class="miss">✗ ${L.actual}</span> missed`)
+      + ` · Eng ${L.engHit?'✓':'✗'}` + (L.aiHit==null?'':` · AI ${L.aiHit?'✓':'✗'}`)
+    : (P.oR?'Tap the result when it lands.':'Tap the first result to start.');
   const rec=P.rounds.slice(-5);
-  $('recent').innerHTML='<span class="rl">recent →</span>'+rec.map((e,i)=>
-    `<span class="rv${e.oh?' h':''}${i===rec.length-1?' now':''}">${e.s}</span>`).join('') || '';
+  $('recent').innerHTML=rec.map((e,i)=>`<span class="rv${e.oh?' h':''}${i===rec.length-1?' now':''}">${Number(e.s)|0}</span>`).join('');
 }
 let reelPick=[];
 function buildPad(){
   if(P.mode==='reels'){ buildReelPad(); return; }
-  let h=''; for(let n=0;n<=27;n++) h+=`<button class="n" data-n="${n}">${n}</button>`;
-  $('pad').innerHTML=h; $('pad').querySelectorAll('.n').forEach(b=>b.onclick=()=>resolve(+b.dataset.n));
-  if($('entryLab')){ $('entryLab').textContent='tap the result (0–27)'; $('reelPicks').innerHTML=''; $('modeBtn').textContent='3-digit entry'; }
+  let h=''; for(let n=0;n<=27;n++) h+=`<button class="n${BASE8set.has(n)?' ctr':''}" data-n="${n}">${n}</button>`;
+  $('pad').className='pad'; $('pad').innerHTML=h; $('pad').querySelectorAll('.n').forEach(b=>b.onclick=()=>resolve(+b.dataset.n));
+  $('reelLine').style.display='none'; $('reelPicks').innerHTML=''; $('modeBtn').textContent='3-digit entry';
 }
 function buildReelPad(){
   let h=''; for(let d=0;d<=9;d++) h+=`<button class="n d" data-d="${d}">${d}</button>`;
-  $('pad').innerHTML=h; $('pad').querySelectorAll('.d').forEach(b=>b.onclick=()=>pickDigit(+b.dataset.d));
-  $('modeBtn').textContent='sum entry'; renderReelPicks();
+  $('pad').className='pad reels'; $('pad').innerHTML=h; $('pad').querySelectorAll('.d').forEach(b=>b.onclick=()=>pickDigit(+b.dataset.d));
+  $('reelLine').style.display='flex'; $('modeBtn').textContent='0–27 entry'; renderReelPicks();
 }
 function renderReelPicks(){ if(!$('reelPicks'))return;
-  $('entryLab').textContent='tap the 3 reel digits as they land';
+  $('entryLab').textContent='reel digits';
   $('reelPicks').innerHTML = reelPick.length
     ? reelPick.join(' + ') + (reelPick.length<3 ? ' <span class="dim">…</span>' : ' = '+reelPick.reduce((a,b)=>a+b,0))
     : '<span class="dim">digit 1 · 2 · 3</span>';
@@ -228,6 +230,10 @@ function toggleMode(){ P.mode = (P.mode==='reels')?'sum':'reels'; reelPick=[]; s
 
 $('x').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.close) SyloxNative.close(); }catch(e){} };
 $('undo').onclick=undo;
+$('more').onclick=()=>{ const m=$('menu'); m.style.display=m.style.display==='none'?'flex':'none'; requestAnimationFrame(reportHeight); };
+function setFold(on){ $('ov').classList.toggle('folded',on); $('fold').textContent=on?'▴':'▾';
+  try{ localStorage.setItem('sylox_fold',on?'1':''); }catch(e){} requestAnimationFrame(reportHeight); }
+$('fold').onclick=()=>setFold(!$('ov').classList.contains('folded'));
 $('modeBtn').onclick=toggleMode;
 $('open').onclick=()=>{ try{ if(window.SyloxNative&&SyloxNative.openFull) SyloxNative.openFull();
   else window.open('fairness_demo.html','_blank'); }catch(e){ location.href='fairness_demo.html'; } };
@@ -317,7 +323,7 @@ function aiAfterRound(){ const c=SYLOX_AI.cfg(); if(c.mode!=='live'||!SYLOX_AI.r
   if(since>=(+c.retuneEvery||25)) aiTuneNow(); }
 function renderAi(){ if(!$('aiRow')) return;
   const c=SYLOX_AI.cfg(), on=c.mode!=='off';
-  $('aiRow').style.display=on?'flex':'none';
+  $('aiRow').style.display=on?'grid':'none';
   if(on){ if(cur&&cur.ai) chips(cur.ai,'ai'); else $('ai').innerHTML=`<span class="aiNote">${aiBusy.pick?'thinking…':c.mode==='live'?'waiting for next round':'tap “AI pick now”'}</span>`;
     const n=P.aiN||0, ap=$('aiPct');
     if(n){ const a=Math.round((P.aiH||0)/n*100), b=Math.round((P.aiB||0)/n*100);
@@ -363,7 +369,7 @@ try{ P=load();
     P=rebuildFrom(P.rounds,P.seed,P.created,P.engLog); Object.assign(P,keep); P.del=P.del||[]; save(); }
   // a test shared TO the Android app (via the share sheet) arrives here on open
   try{ if(window.SyloxNative&&SyloxNative.pendingImport){ const pend=SyloxNative.pendingImport(); if(pend) window.__sxImport(pend); } }catch(e){}
-  buildPad(); lockRound(); reportHeight(); }
+  buildPad(); lockRound(); try{ if(localStorage.getItem('sylox_fold')) setFold(true); }catch(e){} reportHeight(); }
 catch(e){ document.body.innerHTML='<div class="err">overlay error: '+e.message+'</div>'; }
 </script>
 </body>
