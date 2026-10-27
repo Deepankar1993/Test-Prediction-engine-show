@@ -10,13 +10,14 @@
    ENG tuning that was live at that time, so the history is never scored with hindsight. */
 window.SYLOX_CORE = (function () {
   const K_OLD = 7, K_NEW = 4, CONF_THR = 0.15;   // CONF_THR = "the engine is sure" cutoff for the trust meter
+  const ENGV = 3;   // bump when scoring changes -> stored stats are replayed once from the round log (v3: ENG row = raw live picks)
   const BASE7 = new Set(topK(PRIOR, K_OLD));     // the no-skill central-7 block (10-16)
   const dayKey = ts => { const d = new Date(ts); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
 
   function fresh() { return { v: 2, created: Date.now(), mode: 'sum', Hold: [], Hnew: [], reels: [],
     Wold: newWeights(), Wnew: newWeights(), Wr: [newWeights(), newWeights(), newWeights()],
     oH: 0, oR: 0, bH: 0, nH: 0, nR: 0, streak: 0, best: 0, days: {}, lastTs: null, rounds: [], del: [], lastExport: 0,
-    engV: 2, engLog: [], aiN: 0, aiH: 0, aiB: 0,   // engLog = timestamped ENG re-tunes (synced); ai* = AI-pick track record
+    engV: ENGV, engLog: [], aiN: 0, aiH: 0, aiB: 0,   // engLog = timestamped ENG re-tunes (synced); ai* = AI-pick track record
     t1N: 0, t1Hit: 0, t1SumP: 0, cHiN: 0, cHiHit: 0, shN: 0, shH: 0,   // trust meter + shadow (ENG hits, drives do-no-harm)
     seed: 'player-' + Math.floor(Math.random() * 1e9).toString(36) }; }
   // fill defaults on a loaded/imported state; null if it isn't a v2 test
@@ -30,7 +31,7 @@ window.SYLOX_CORE = (function () {
   // true when the stored derived stats can't be trusted and must be replayed from the round log
   // (old engine version, missing trust meter, retired seed rounds, or the web tool's old format
   // that kept a pasted-history prefix in Hold)
-  const needsRebuild = s => s.engV !== 2 || s.t1N == null || s.shN == null ||
+  const needsRebuild = s => s.engV !== ENGV || s.t1N == null || s.shN == null ||
     s.rounds.some(r => r && r.seed) || (s.Hold || []).length !== s.rounds.length;
 
   // record one round's top-pick confidence + whether it landed (prequential)
@@ -43,9 +44,13 @@ window.SYLOX_CORE = (function () {
   function trustK(s) { const sN = s.shN || 0; if (sN < 50) return 0;
     const sRate = (s.shH || 0) / sN, bRate = s.oR ? (s.bH / s.oR) : 0;
     return Math.max(0, Math.min(1, ((sRate - bRate) - 0.005) / 0.045)); }   // ramp 0..1 as edge goes ~0.5%->5%
+  // BET = evidence-gated pool blended toward the prior by trustK. ENG row (fullList/fullPool) = the
+  // engine's RAW live picks, so you can watch what it actually thinks every round; they are scored
+  // as ENG's shadow record, and only reach BET once that record beats the baseline.
   function blendBet(full, s) { const k = trustK(s);
     const pool = full.pool ? full.pool.map((v, i) => (1 - k) * PRIOR[i] + k * (isFinite(v) ? v : PRIOR[i])) : full.pool;
-    return { list: topK(pool, K_OLD), pool, fullPool: full.pool, dists: full.dists, fullList: full.list, k }; }
+    const raw = full.raw || full.pool;
+    return { list: topK(pool, K_OLD), pool, fullPool: raw, dists: full.dists, fullList: full.rawList || full.list, k }; }
   // the ENG tuning that was live at time t (re-tunes apply forward only)
   function paramsAt(s, t) { let p = null; for (const e of (s.engLog || [])) if (e.t <= t) p = e; return p || {}; }
   // AI picks sway ENG only in proportion to the AI's own measured edge over the central baseline
