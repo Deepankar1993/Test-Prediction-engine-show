@@ -111,7 +111,7 @@
       <div class="mini" id="aiSetBtn">settings</div>
       <div class="aiSet" id="aiSet" style="display:none">
         <input id="aiKey" type="password" placeholder="Claude API key (sk-ant-…)" autocomplete="off" spellcheck="false">
-        <input id="aiWs" placeholder="workspace ID (wrkspc_…)" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <input id="aiWs" placeholder="workspace ID (only for org-scoped keys)" autocomplete="off" autocapitalize="off" spellcheck="false">
         <select id="aiModel"></select>
         <div class="aiPair"><label>budget $/mo<input id="aiBudget" type="number" min="0" step="1"></label>
           <label>live re-tune every<input id="aiEvery" type="number" min="5" step="5"></label></div>
@@ -421,7 +421,7 @@ function renderAi(){ if(!$('aiRow')) return;
   $('aiMode').querySelectorAll('div').forEach(d=>d.classList.toggle('on',d.dataset.m===c.mode));
   $('aiPick').classList.toggle('busy',aiBusy.pick||!SYLOX_AI.ready()); $('aiTune').classList.toggle('busy',aiBusy.tune||!SYLOX_AI.ready());
   const nt=$('aiNote'); nt.className='aiNote'+(aiErr?' err':'');
-  nt.textContent=aiMsg||(!c.key||!c.ws?'Open settings: add your Claude API key + workspace ID.':c.mode==='off'?'AI is off — ENG runs on its own.':'');
+  nt.textContent=aiMsg||(!c.key?'Open settings: add your Claude API key.':c.mode==='off'?'AI is off — ENG runs on its own.':'');
   const u=SYLOX_AI.usage(), m=SYLOX_AI.MODELS[c.model];
   const tr=Math.round(aiTrust(P)*100), lastT=(P.engLog||[]).slice(-1)[0];
   $('aiSpend').textContent=`${m?m.label:c.model} · ${u.month}: $${u.usd.toFixed(2)} of $${c.budget} · ${u.calls} calls · AI blend into ENG ${tr}%`+(lastT?` · tuned @${lastT.n}r`:'');

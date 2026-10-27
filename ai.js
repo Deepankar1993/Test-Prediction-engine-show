@@ -24,7 +24,8 @@ window.SYLOX_AI = (function () {
   function cfg() { return read(CFG_KEY, DEFAULTS); }
   function setCfg(patch) { const c = Object.assign(cfg(), patch); write(CFG_KEY, c); return c; }
   function usage() { const u = read(USE_KEY, { month: month(), usd: 0, calls: 0 }); return u.month === month() ? u : { month: month(), usd: 0, calls: 0 }; }
-  function ready() { const c = cfg(); return !!(c.key && c.ws && c.mode !== 'off'); }
+  // workspace ID is only needed for organization-scoped keys; workspace-scoped keys work without it
+  function ready() { const c = cfg(); return !!(c.key && c.mode !== 'off'); }
 
   const SYSTEM =
     'You are the analyst inside a live prediction tool for a per-minute number game. Each round result is ' +
@@ -50,13 +51,14 @@ window.SYLOX_AI = (function () {
 
   async function call(userText, schema, effort, maxTokens) {
     const c = cfg(), m = MODELS[c.model] || MODELS[DEFAULTS.model];
-    if (!c.key || !c.ws) throw new Error('add your API key + workspace ID in AI settings');
+    if (!c.key) throw new Error('add your Claude API key in AI settings');
     const u = usage(); if (u.usd >= (+c.budget || 0)) throw new Error(`monthly AI budget reached ($${u.usd.toFixed(2)})`);
     const body = { model: c.model, max_tokens: maxTokens, system: SYSTEM,
       output_config: { effort, format: { type: 'json_schema', schema } },
       messages: [{ role: 'user', content: userText }] };
     const headers = { 'content-type': 'application/json', 'x-api-key': c.key, 'anthropic-version': '2023-06-01',
-      'anthropic-workspace-id': c.ws, 'anthropic-dangerous-direct-browser-access': 'true' };
+      'anthropic-dangerous-direct-browser-access': 'true' };
+    if (c.ws) headers['anthropic-workspace-id'] = c.ws;
     const send = async (withFallback) => {
       const h = Object.assign({}, headers), b = Object.assign({}, body);
       if (withFallback) { h['anthropic-beta'] = 'server-side-fallback-2026-07-01'; b.fallbacks = 'default'; }
