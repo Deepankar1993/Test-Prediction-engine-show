@@ -222,7 +222,8 @@
   .rl{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;
     font-family:var(--mono);font-size:13px;border-bottom:1px solid var(--line-soft)}
   .rl .k{color:var(--faint)}
-  .gauges{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
+  .gauges{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:20px}
+  @media(max-width:900px){.gauges{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:560px){.gauges{grid-template-columns:1fr}}
   .ring{border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;
     background:linear-gradient(180deg,var(--panel),var(--ink-2))}
@@ -244,6 +245,36 @@
   .bigchips .bchip{font-size:16px;min-width:38px;padding:8px 6px;border-radius:8px}
   .bchip.old{border-color:var(--bad);color:#ff9d8b;background:#22120f}
   .bchip.new{border-color:var(--good);color:#7fe3c0;background:#0f2018}
+  .bchip.eng{border-color:var(--steel);color:#9fc4f0;background:#101a2a}
+  .bchip.ai{border-color:#8f6fd6;color:#cdb4ff;background:#1d1430}
+  .bchip small{display:block;font-size:9px;font-weight:600;opacity:.7;line-height:1;margin-top:2px}
+  .bchip.hitc{box-shadow:0 0 0 2px var(--text);color:var(--text)}
+  /* app-style prediction rows (same as the phone's floating window) */
+  .prow{display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:10px;margin-top:10px}
+  .prow .plab{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--faint)}
+  .prow .plab b{display:block;color:var(--muted);font-size:12px}
+  .prow .bigchips{margin:0}
+  .prow .ppct{font-family:var(--mono);font-size:15px;font-weight:700;text-align:right;white-space:nowrap}
+  .prow .ppct small{display:block;font-size:10px;font-weight:400;color:var(--faint)}
+  @media(max-width:560px){.prow{grid-template-columns:1fr auto}.prow .plab{grid-column:1/-1}
+    .prow .bigchips{flex-wrap:nowrap;gap:4px}.prow .bigchips .bchip{flex:1;min-width:0;padding:6px 0;font-size:14px}}
+  /* round-by-round table */
+  .rounds{margin-top:18px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .rounds-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:#0f1925;
+    font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .rounds-head b{color:var(--text)}
+  .rounds-head .mini{margin-left:auto}
+  .rtable-wrap{max-height:560px;overflow:auto}
+  .rtable{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+  .rtable th{position:sticky;top:0;background:#0d1722;color:var(--faint);text-align:left;font-weight:500;
+    padding:8px 10px;letter-spacing:.06em;font-size:10.5px;border-bottom:1px solid var(--line-soft)}
+  .rtable td{padding:7px 10px;border-bottom:1px solid var(--line-soft);color:var(--muted);vertical-align:middle}
+  .rtable td.res b{color:var(--text);font-size:14px}
+  .rtable .betchips .bchip{font-size:11px;min-width:22px;padding:2px 4px}
+  .rtable .mk{display:inline-block;min-width:16px;font-weight:700;margin-right:6px}
+  .rtable .mk.y{color:var(--good)} .rtable .mk.n{color:var(--faint)}
+  .rtable .sy{white-space:nowrap}
+  @media(max-width:720px){.rtable .betchips{display:none}.rtable td,.rtable th{padding:6px 7px}}
 
   /* live-tool status bar */
   .statusbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;
@@ -460,204 +491,10 @@
   </div>
 </div>
 
+<script src="engine.js"></script>
+<script src="appcore.js"></script>
 <script src="sync.js"></script>
 <script>
-/* ============================================================
-   Pure-JS SHA-256 + HMAC  (so the file verifies offline, file://)
-   ============================================================ */
-function sha256bytes(msgBytes){
-  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
-  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
-  const l=msgBytes.length; const bitLen=l*8;
-  const withOne=l+1; let padLen=(56-withOne%64+64)%64;
-  const total=l+1+padLen+8; const m=new Uint8Array(total);
-  m.set(msgBytes); m[l]=0x80;
-  const dv=new DataView(m.buffer);
-  dv.setUint32(total-4, bitLen>>>0); dv.setUint32(total-8, Math.floor(bitLen/0x100000000));
-  const w=new Uint32Array(64);
-  const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
-  for(let off=0;off<total;off+=64){
-    for(let i=0;i<16;i++) w[i]=dv.getUint32(off+i*4);
-    for(let i=16;i<64;i++){
-      const s0=rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3);
-      const s1=rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10);
-      w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0;
-    }
-    let [a,b,c,d,e,f,g,h]=H;
-    for(let i=0;i<64;i++){
-      const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);
-      const ch=(e&f)^(~e&g);
-      const t1=(h+S1+ch+K[i]+w[i])>>>0;
-      const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);
-      const maj=(a&b)^(a&c)^(b&c);
-      const t2=(S0+maj)>>>0;
-      h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;
-    }
-    H=[(H[0]+a)>>>0,(H[1]+b)>>>0,(H[2]+c)>>>0,(H[3]+d)>>>0,
-       (H[4]+e)>>>0,(H[5]+f)>>>0,(H[6]+g)>>>0,(H[7]+h)>>>0];
-  }
-  const out=new Uint8Array(32); const odv=new DataView(out.buffer);
-  H.forEach((x,i)=>odv.setUint32(i*4,x)); return out;
-}
-const enc=new TextEncoder();
-const toHex=b=>Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('');
-const sha256hex=s=>toHex(sha256bytes(enc.encode(s)));
-function hmacSha256(keyStr,msgStr){
-  let key=enc.encode(keyStr);
-  if(key.length>64) key=sha256bytes(key);
-  const k=new Uint8Array(64); k.set(key);
-  const ip=new Uint8Array(64), op=new Uint8Array(64);
-  for(let i=0;i<64;i++){ip[i]=k[i]^0x36; op[i]=k[i]^0x5c;}
-  const inner=sha256bytes(concat(ip, enc.encode(msgStr)));
-  return sha256bytes(concat(op, inner));
-}
-function concat(a,b){const o=new Uint8Array(a.length+b.length);o.set(a);o.set(b,a.length);return o;}
-
-/* ============================================================
-   ENGINES
-   ============================================================ */
-// digits 0-9 (x3) from a byte array, unbiased via rejection sampling -> sum 0..27
-function sumFromBytes(bytes){
-  const d=[]; let i=0;
-  while(d.length<3){ const b=bytes[i++%bytes.length]; if(b<250) d.push(b%10); }
-  return d[0]+d[1]+d[2];
-}
-/* ---- THE LEARNING PREDICTION ENGINE (generic; sees only result history) ----
-   A self-tuning ensemble of statistical signals. Each scores every value 0..27 for the
-   next round; each signal's weight tracks its OWN recent walk-forward accuracy
-   (multiplicative-weights / Hedge). Validated offline: large edge on Markov / periodic /
-   biased / weak-LCG streams (e.g. a recoverable RNG cracked to ~82%), and ~0 edge on a
-   truly random stream — it never invents skill it doesn't have. */
-const R=28, ETA=0.18;
-const PRIOR=(()=>{const c=new Array(R).fill(0);
-  for(let a=0;a<10;a++)for(let b=0;b<10;b++)for(let d=0;d<10;d++)c[a+b+d]++;
-  return c.map(x=>x/1000);})();
-const SIGNALS=['marginal','freq','markov1','markov2','vomm','period','gap'];
-function nrm(a){let s=0;for(const v of a)s+=v;s=s||1;return a.map(v=>v/s);}
-// signals are range-generic: RG = number of values, PRI = that range's prior.
-function sigDist(name,H,RG,PRI){
-  RG=RG||R; PRI=PRI||PRIOR; const n=H.length;
-  if(name==='marginal') return PRI.slice();
-  if(name==='freq'){ const d=0.96,w=new Array(RG).fill(0.3);
-    for(let i=0;i<n;i++) w[H[i]]+=Math.pow(d,n-1-i); return nrm(w); }
-  if(name==='markov1'){ if(n<3) return null; const last=H[n-1];
-    const row=new Array(RG).fill(0); let tot=0;
-    for(let i=0;i<n-1;i++) if(H[i]===last){row[H[i+1]]++;tot++;}
-    if(tot<2) return null; return nrm(row.map((v,k)=>v+0.25*PRI[k])); }
-  if(name==='markov2'){ if(n<6) return null; const a=H[n-2],b=H[n-1];
-    const row=new Array(RG).fill(0); let tot=0;
-    for(let i=0;i<n-2;i++) if(H[i]===a&&H[i+1]===b){row[H[i+2]]++;tot++;}
-    if(tot<2) return null; return nrm(row.map((v,k)=>v+0.2*PRI[k])); }
-  // variable-order Markov / context-match: the workhorse. For each context length k (long->short),
-  // find earlier occurrences of the last k values and tally what followed; blend, longer contexts
-  // weighted higher. Catches periodic, LCG, and repeating-motif structure of unknown order, and
-  // produces SHARP, varied (non-central) predictions when real structure exists. Null on fair data.
-  if(name==='vomm'){ const win=400, g=n>win?H.slice(n-win):H, m=g.length; if(m<6) return null;
-    const dist=new Array(RG).fill(0); let any=false; const maxO=Math.min(8,m-1);
-    for(let kk=maxO;kk>=1;kk--){
-      const succ=new Array(RG).fill(0); let tot=0;
-      for(let i=0;i+kk<m;i++){ let mt=true; for(let j=0;j<kk;j++) if(g[i+j]!==g[m-kk+j]){mt=false;break;}
-        if(mt){succ[g[i+kk]]++;tot++;} }
-      if(tot>=2){ const wgt=kk*kk*Math.min(tot,12); for(let v=0;v<RG;v++) dist[v]+=wgt*succ[v]/tot; any=true; } }
-    if(!any) return null;
-    for(let v=0;v<RG;v++) dist[v]+=0.03*PRI[v]; return nrm(dist); }
-  if(name==='gap'){ if(n<RG) return null; const last=new Array(RG).fill(-1);
-    for(let i=0;i<n;i++) last[H[i]]=i; const d=new Array(RG);
-    for(let k=0;k<RG;k++){const gap=n-1-last[k],exp=1/Math.max(PRI[k],1e-6);
-      d[k]=PRI[k]*(1+Math.max(0,(gap-exp))/exp);} return nrm(d); }
-  if(name==='period'){ if(n<24) return null; const win=200,g=H.slice(Math.max(0,n-win)),m=g.length;
-    let mean=0;for(const v of g)mean+=v;mean/=m; let varr=0;for(const v of g)varr+=(v-mean)*(v-mean);varr=varr||1;
-    let best=-1,br=0; for(let L=1;L<Math.min(16,m>>1);L++){let num=0;
-      for(let i=L;i<m;i++)num+=(g[i]-mean)*(g[i-L]-mean); const r=num/varr;
-      if(Math.abs(r)>Math.abs(br)){br=r;best=L;}}
-    if(best<0||Math.abs(br)<0.18) return null; const pred=g[m-best];
-    const d=PRI.map(p=>p*0.15); for(let k=0;k<RG;k++) d[k]+=Math.exp(-((k-pred)*(k-pred))/8);
-    return nrm(d); }
-  return null;
-}
-function sigAll(H,RG,PRI){ const d={}; for(const nm of SIGNALS) d[nm]=sigDist(nm,H,RG,PRI); return d; }
-// linear (mixture) pool: a weighted average of the signal distributions — does NOT let
-// the central marginal veto low-prior (tail) values, so genuine patterns (incl. spread/tail
-// numbers) surface in the top-k. Validated equal-or-better edge on structured streams, ~0 on fair.
-function combineDists(dists,W,RG,PRI){
-  RG=RG||R; PRI=PRI||PRIOR; const out=new Array(RG).fill(0); let ws=0;
-  for(const nm of SIGNALS){ const d=dists[nm]; if(!d||W[nm]<=0) continue; ws+=W[nm];
-    for(let k=0;k<RG;k++){ const v=d[k]; if(isFinite(v)) out[k]+=W[nm]*v; } }
-  if(ws===0) return PRI.slice();
-  const s=nrm(out);
-  return s.some(x=>!isFinite(x))?PRI.slice():s;
-}
-// NaN-safe; ties break toward the CENTER of the range (the honest baseline), never to [0,1,2,3…].
-function topK(arr,k){ const C=(arr.length-1)/2;
-  return [...Array(arr.length).keys()].sort((a,b)=>{
-    const va=isFinite(arr[a])?arr[a]:-Infinity, vb=isFinite(arr[b])?arr[b]:-Infinity;
-    return (vb-va) || (Math.abs(a-C)-Math.abs(b-C)) || (a-b);
-  }).slice(0,k); }
-function predict(H,W,k,RG,PRI){ const dists=sigAll(H,RG,PRI);
-  return {list:topK(combineDists(dists,W,RG,PRI),k), dists}; }
-function updateWeights(W,dists,actual,k){
-  for(const nm of SIGNALS){ const d=dists[nm]; if(!d) continue;
-    const inTop=topK(d,k).indexOf(actual)>=0; W[nm]*=Math.exp(ETA*((inTop?1:0)-0.5)); }
-  // keep every detector alive (floor) so structure can surface later; cap the marginal so a fair
-  // warm-up can't lock the engine onto the central block forever.
-  for(const nm of SIGNALS){ if(W[nm]<0.06) W[nm]=0.06; }
-  if(W.marginal>1.6) W.marginal=1.6;
-  let s=0;for(const nm of SIGNALS)s+=W[nm]; const f=SIGNALS.length/(s||1);
-  for(const nm of SIGNALS) W[nm]*=f;
-}
-function newWeights(){ const W={}; for(const nm of SIGNALS) W[nm]=1; return W; }
-
-// ---- per-reel prediction (3 digits 0-9) -> convolved to a 0-27 sum distribution ----
-// summing three reels smears out weak-RNG structure; modelling each reel separately and
-// recombining recovers it (validated: ~+25pt edge vs +4pt for sum-only on coprime-cycle reels).
-const DPRI=new Array(10).fill(0.1);
-function convolve3(a,b,c){ const out=new Array(R).fill(0);
-  for(let i=0;i<10;i++)for(let j=0;j<10;j++){const ij=a[i]*b[j]; if(ij===0)continue;
-    for(let m=0;m<10;m++) out[i+j+m]+=ij*c[m];} return out; }
-function predictReels(reels,Wr,k){
-  const per=[],combs=[];
-  for(let r=0;r<3;r++){ const Dr=reels.map(t=>t[r]); const dists=sigAll(Dr,10,DPRI);
-    const comb=combineDists(dists,Wr[r],10,DPRI); per.push({dists,comb}); combs.push(comb); }
-  const sumDist=convolve3(combs[0],combs[1],combs[2]);
-  return {list:topK(sumDist,k), sumDist, per};
-}
-const CENTER8=new Set([10,11,12,13,14,15,16,17]);   // static no-skill cover (the honest baseline)
-function wilson(h,n){ if(!n) return [0,0]; const z=1.96,p=h/n,den=1+z*z/n;
-  const c=(p+z*z/(2*n))/den, mrg=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/den;
-  return [Math.max(0,c-mrg),Math.min(1,c+mrg)]; }
-
-// demo-mode simulated old engine (used only when NOT wired to the live app, so the tool
-// can be shown in a meeting). 'weak' = a recoverable LCG-class engine carrying real
-// structure the generic predictor learns honestly; 'fair' = independent draws.
-let demoLCG=7;
-function weakEngineNext(){ demoLCG=(demoLCG*9+13)%R; return Math.random()<0.8?demoLCG:r3(); }
-function r3(){return (Math.random()*10|0)+(Math.random()*10|0)+(Math.random()*10|0);}
-
-// exact distribution of the sum of three 0-9 digits (1000 combos) -> rigorous pricing
-const DIST=(()=>{const c=new Array(28).fill(0);
-  for(let a=0;a<10;a++)for(let b=0;b<10;b++)for(let d=0;d<10;d++)c[a+b+d]++;return c;})();
-function trueProb(set){let s=0;set.forEach(n=>s+=DIST[n]||0);return s/1000;}
-
-// RIGHT: provably-fair commit-reveal engine.
-function randHex(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return toHex(a);}
-function fairRound(clientSeed,nonce){
-  const serverSeed=randHex(32);
-  const commit=sha256hex(serverSeed);
-  const result=sumFromBytes(hmacSha256(serverSeed,`${clientSeed}:${nonce}`));
-  return {serverSeed,commit,clientSeed,nonce,result};
-}
-function fairVerify(r){
-  if(sha256hex(r.serverSeed)!==r.commit) return false;
-  return sumFromBytes(hmacSha256(r.serverSeed,`${r.clientSeed}:${r.nonce}`))===r.result;
-}
-
 /* ============================================================
    UI
    ============================================================ */
@@ -730,86 +567,39 @@ renderHistStats(); refreshPreview();
 
 // ================= LIVE PREDICTION TOOL (persists across a 7-8 day test) =================
 const BAD='#ef5d44', GOOD='#22c08a', STEEL='#5b8bd0', AMBER='#e0a93c';
-const LS_KEY='sylox_livetest_v2', K_OLD=7, K_NEW=4, MINN=80;
-const BASE8=topK(PRIOR,K_OLD), BASE8set=new Set(BASE8);     // central-8 = the no-skill baseline
-const baseProb8=BASE8.reduce((s,k)=>s+PRIOR[k],0);          // ~0.560
+const LS_KEY='sylox_livetest_v2', MINN=80;
+// ONE implementation shared with the phone app (appcore.js): same rows, same numbers, same rounds.
+const {K_OLD,K_NEW,BASE7,fresh,normalize,needsRebuild,trustK,predictRound,applyRound,rebuildFrom,mergeRemote}=SYLOX_CORE;
+const BASE8=[...BASE7].sort((a,b)=>a-b), BASE8set=BASE7;     // central-7 = the no-skill baseline (10-16)
+const baseProb8=BASE8.reduce((s,k)=>s+PRIOR[k],0);          // ~0.52 on a fair game
 let P=null, cur=null, apTimer=null, isDemo=false, focusOpen=false, reelPick=[null,null,null];
-const chips=(arr,cls)=>arr.slice().sort((a,b)=>a-b).map(n=>`<span class="bchip ${cls||''}">${n}</span>`).join('');
-const dayKey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+let stories=null, showAllRounds=false;   // per-round story: what BET/ENG/NEW predicted and whether it landed
+const num=v=>Number(v)|0;
+const chips=(arr,cls,hitN)=>arr.slice().sort((a,b)=>a-b).map(n=>`<span class="bchip ${cls||''}${n===hitN?' hitc':''}">${num(n)}</span>`).join('');
+const chipsP=(arr,pool,cls)=>arr.slice().sort((a,b)=>a-b).map(n=>{ const p=(pool&&isFinite(pool[n]))?Math.round(pool[n]*100):0;
+  return `<span class="bchip ${cls}">${num(n)}<small>${p}%</small></span>`; }).join('');
+const dayKey=SYLOX_CORE.dayKey;
 
-function newState(){
-  const nums=parseHistory().nums;
-  const st={v:2, created:Date.now(), mode:'sum',
-    Hold:nums.slice(), Hnew:[], reels:[], Wold:newWeights(), Wnew:newWeights(),
-    Wr:[newWeights(),newWeights(),newWeights()],
-    oH:0,oR:0, bH:0, nH:0,nR:0, streak:0, best:0, days:{}, lastTs:null,
-    rounds:[], lastExport:0,
-    seed:($('clientSeed').value||'player')+'-'+Math.floor(Math.random()*1e9).toString(36)};
-  if(st.Hold.length<=800) for(let i=12;i<st.Hold.length;i++){    // warm signal weights on the pasted history
-    const dists=sigAll(st.Hold.slice(0,i)); updateWeights(st.Wold,dists,st.Hold[i],K_OLD); }
-  return st;
-}
-function loadState(){ try{const s=JSON.parse(localStorage.getItem(LS_KEY));
-  if(s&&s.v===2){ if(!s.rounds)s.rounds=[]; if(s.lastExport==null)s.lastExport=0; return s; } return null; }catch(e){return null;} }
+function newState(){ const s=fresh(); s.seed=($('clientSeed').value||'player')+'-'+Math.floor(Math.random()*1e9).toString(36); return s; }
+function loadState(){ try{ return normalize(JSON.parse(localStorage.getItem(LS_KEY))); }catch(e){ return null; } }
+// replay the round log when stored stats are stale (older engine, or this tool's old format that
+// kept a pasted-history prefix) — afterwards the numbers match the phone app exactly
+function migrate(s){ if(!needsRebuild(s)) return s;
+  const keep={del:s.del, mode:s.mode, lastExport:s.lastExport};
+  const np=Object.assign(rebuildFrom(s.rounds.filter(r=>!(r&&r.seed)),s.seed,s.created,s.engLog),keep); np.del=np.del||[]; return np; }
+function ensureStories(){ if(stories) return stories; const st=[];
+  rebuildFrom(P.rounds,P.seed,P.created,P.engLog,x=>st.push(x)); return stories=st; }
 const REMIND_EVERY=30;   // nudge the tester to back up every N live rounds
 function saveState(){ if(isDemo) return; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){}
   try{ if(window.SYLOX_SYNC&&SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }
-// Deterministically rebuild the whole state by replaying the timestamped round log on top
-// of the static observed-history prefix (seedHist). Reel-aware. Used by cross-device merge.
-function rebuildFrom(rounds, seedHist, seed, created, mode){
-  const np={v:2, created:created, mode:mode||'sum',
-    Hold:(seedHist||[]).slice(), Hnew:[], reels:[], Wold:newWeights(), Wnew:newWeights(),
-    Wr:[newWeights(),newWeights(),newWeights()],
-    oH:0,oR:0,bH:0,nH:0,nR:0,streak:0,best:0,days:{},lastTs:null,rounds:[],lastExport:0,seed:seed};
-  if(np.Hold.length<=800) for(let i=12;i<np.Hold.length;i++){           // warm weights on the seed history (no counters)
-    const dists=sigAll(np.Hold.slice(0,i)); updateWeights(np.Wold,dists,np.Hold[i],K_OLD); }
-  for(const e of rounds){
-    if(e.seed) continue;   // warm-up/seed rounds retired: dropped on every rebuild so they can never re-enter via sync
-    const sumPred=predict(np.Hold,np.Wold,K_OLD);
-    const reelPred = np.mode==='reels' ? predictReels(np.reels,np.Wr,K_OLD) : null;
-    const useReel = reelPred && np.reels.length>=12;
-    const old = useReel?reelPred:sumPred;
-    const oldHit=old.list.indexOf(e.s)>=0; np.oR++; if(oldHit)np.oH++; if(BASE8set.has(e.s))np.bH++;
-    updateWeights(np.Wold,sumPred.dists,e.s,K_OLD);
-    if(e.r && reelPred){ for(let r=0;r<3;r++) updateWeights(np.Wr[r],reelPred.per[r].dists,e.r[r],3); np.reels.push(e.r); }
-    np.Hold.push(e.s);
-    const nw=predict(np.Hnew,np.Wnew,K_NEW); const res=e.nr, newHit=nw.list.indexOf(res)>=0;
-    np.nR++; if(newHit)np.nH++; updateWeights(np.Wnew,nw.dists,res,K_NEW); np.Hnew.push(res);
-    np.streak=oldHit?np.streak+1:0; if(np.streak>np.best)np.best=np.streak;
-    np.lastTs=e.t; const dk=dayKey(e.t); const dd=np.days[dk]||(np.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oldHit)dd.oH++; if(BASE8set.has(e.s))dd.bH++;
-    np.rounds.push(e);
-  }
-  return np;
-}
-// Round identity: per-round random id (two devices can tap in the same ms); legacy rounds use t.
-const newRoundId=ts=>ts.toString(36)+'-'+Math.random().toString(36).slice(2,8);
-const rk=e=>e.id||e.t;
-function mergeRounds(a,b,del){ // union by round id, chronological (id tie-break); drops only tombstoned (undone) rounds
-  const m=new Map(), gone=new Set(del||[]);
-  for(const e of [...(a||[]),...(b||[])]) if(e&&e.t!=null&&!e.seed&&!gone.has(rk(e))&&!m.has(rk(e))) m.set(rk(e),e);
-  return [...m.values()].sort((x,y)=>(x.t-y.t)||String(rk(x)).localeCompare(String(rk(y))));
-}
-const unionDel=(a,b)=>[...new Set([...(a||[]),...(b||[])])].sort((x,y)=>x-y);
-// MERGE remote in, never replace: union of both devices' rounds (minus deletions), replayed on our
-// seed history. Returns true if local data changed; pushes back whenever the remote lacks something.
+// MERGE remote in (same rules as the phone): union of rounds minus undone ones, + ENG tuning log.
 function syncApply(s){
   if(isDemo || !s || s.v!==2 || !Array.isArray(s.rounds)) return false;
-  const localN=(P.rounds||[]).length;
-  const del=unionDel(P.del, s.del), merged=mergeRounds(P.rounds, s.rounds, del);
-  const keys=a=>(a||[]).map(rk).join(',');
-  const localChanged = keys(merged)!==keys(P.rounds) || del.length!==(P.del||[]).length;
-  const remoteStale  = keys(merged)!==keys(s.rounds) || del.length!==(s.del||[]).length;
-  if(localChanged){
-    const seedHist=(P.Hold||[]).slice(0, Math.max(0,(P.Hold||[]).length - localN));
-    const np=rebuildFrom(merged, seedHist, P.seed||s.seed,
-                         Math.min(P.created||Date.now(), s.created||Date.now()), P.mode||s.mode||'sum');
-    np.lastExport=Math.min(P.lastExport||0, np.oR); np.del=del;
-    np.engLog=s.engLog||P.engLog||[];   // the phone's ENG tuning log — carried through untouched
-    P=np; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){}
-    buildArena(); lockRound(); render();
-  }
-  if(remoteStale){ try{ if(SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }  // push the superset back
-  return localChanged;
+  const m=mergeRemote(P,s);
+  if(m.localChanged){ P=m.state; stories=null; try{localStorage.setItem(LS_KEY,JSON.stringify(P));}catch(e){}
+    buildArena(); lockRound(); render(); }
+  if(m.remoteStale){ try{ if(SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }  // push the superset back
+  return m.localChanged;
 }
 function updateSyncBtn(st){ const b=$('btnSync'); if(!b) return;
   const on=window.SYLOX_SYNC&&SYLOX_SYNC.active();
@@ -847,28 +637,34 @@ function buildArena(){
   </div>
   <div class="arena-grid">
     <div class="card bad show">
-      <span class="tag bad">Old engine · the live game</span>
+      <span class="tag bad">Live game · same picks as the phone app</span>
       <div class="recent small" id="oldRecent"></div>
-      <h2>Our prediction — 7 numbers</h2>
-      <div class="desc">The engine's top 7 for the next round, learned from your history.
-        <b>Check them against the live app.</b></div>
-      <div class="bigchips" id="oldChips"></div>
+      <h2>This round's picks</h2>
+      <div class="desc">Made <b>before</b> the result, exactly like the floating window. Check them against the live game, then tap the result.</div>
+      <div class="prow"><span class="plab">BET 7<b>play this</b></span><div class="bigchips" id="betChips"></div><span class="ppct" id="betPct"></span></div>
+      <div class="prow"><span class="plab">ENG 7<b>engine</b></span><div class="bigchips" id="engChips"></div><span class="ppct" id="engPct"></span></div>
+      <div class="prow" id="aiPRow" style="display:none"><span class="plab">AI 7<b>record</b></span><div class="bigchips dim" id="aiNote"></div><span class="ppct" id="aiPct"></span></div>
       <div class="patline" id="oldPattern"></div>
       <div class="rl"><span class="k">last round</span><span id="oldOutcome">&mdash;</span></div>
-      <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 7?</span><span></span></div><div id="logL"></div></div>
     </div>
     <div class="card good show">
-      <span class="tag good">New engine · Sylox commit-reveal</span>
+      <span class="tag good">NEW 4 · Sylox commit-reveal</span>
       <h2>Tightest guess — 4 numbers</h2>
       <div class="desc">Same engine, aimed at our provably-fair result (<span id="newCommit" class="seal">commit —</span>).
         No state to learn — it evades.</div>
-      <div class="bigchips" id="newChips"></div>
+      <div class="prow"><span class="plab">NEW 4<b>vs Sylox</b></span><div class="bigchips" id="newChips"></div><span class="ppct" id="newPct"></span></div>
       <div class="rl"><span class="k">last round</span><span><span id="newOutcome">&mdash;</span> <span id="newVerify"></span></span></div>
-      <div class="log"><div class="log-head"><span>#</span><span>result</span><span>in our 4?</span><span>verify</span></div><div id="logR"></div></div>
     </div>
   </div>
   <div class="gauges" id="gauges"></div>
   <div class="auditstrip" id="accStrip"></div>
+  <div class="rounds">
+    <div class="rounds-head"><span>Round by round — what <b>BET 7</b>, <b>ENG 7</b> and <b>NEW 4</b> predicted, and the result</span>
+      <span id="rCount"></span><button class="mini" id="rAll">show all</button></div>
+    <div class="rtable-wrap"><table class="rtable">
+      <thead><tr><th>#</th><th>time</th><th>result</th><th>BET 7</th><th>ENG 7</th><th>NEW 4 → Sylox</th></tr></thead>
+      <tbody id="rBody"></tbody></table></div>
+  </div>
   <p class="edgenote" id="edgeNote"></p>`;
   $('btnMode').textContent = P.mode==='reels' ? 'sum entry (0–27)' : 'reel entry (3 digits)';
   renderEntry('numpad', false);
@@ -883,6 +679,8 @@ function buildArena(){
   $('importFile').onchange=e=>{ if(e.target.files[0]) importData(e.target.files[0]); };
   $('btnSync').onclick=syncToggle;
   $('btnReset').onclick=resetTest;
+  $('rAll').onclick=()=>{ showAllRounds=!showAllRounds; renderRounds(); };
+  if(isDemo){ $('modeTag').textContent='▮ DEMO — simulated, not saved'; $('modeTag').classList.add('demo'); }
   updateSyncBtn();
 }
 // entry area renderer — sum numpad (0–27) or 3 reel rows (0–9); shared by main + focus
@@ -926,103 +724,104 @@ function ring(pct,color,lab,sub,center){
     <div class="ring-lab">${lab}</div><div class="ring-sub">${sub}</div></div>`;
 }
 function lockRound(){
-  const sumPred=predict(P.Hold,P.Wold,K_OLD);                 // always (fallback + keeps learning)
-  const reelPred = P.mode==='reels' ? predictReels(P.reels,P.Wr,K_OLD) : null;
-  const useReel = reelPred && P.reels.length>=12;             // trust reels once there are enough
-  cur={ old: useReel?reelPred:sumPred, sumDists:sumPred.dists, reel:reelPred,
-        nw:predict(P.Hnew,P.Wnew,K_NEW), fair:fairRound(P.seed,P.Hnew.length) };
-  $('oldChips').innerHTML=chips(cur.old.list,'old');
+  cur=predictRound(P,null);
+  $('betChips').innerHTML=chipsP(cur.old.list,cur.old.pool,'old');
+  $('engChips').innerHTML=chipsP(cur.old.fullList,cur.old.fullPool,'eng');
   $('newChips').innerHTML=chips(cur.nw.list,'new');
   $('newCommit').textContent='commit '+cur.fair.commit.slice(0,14)+'…';
-  const ps=patternStatus(cur.old.list);
+  const ps=patternStatus();
   if($('oldPattern')){ $('oldPattern').className='patline '+ps.cls; $('oldPattern').innerHTML=ps.txt; }
   if($('oldRecent')) $('oldRecent').innerHTML=recentStrip();
-  pulse($('oldChips'));
+  pulse($('betChips'));
   if(focusOpen) renderFocus();
 }
-// is the prediction tracking real structure, or just the fair central block?
-function patternStatus(list){
-  const off=list.filter(x=>!BASE8set.has(x)).length;        // numbers off the no-skill central block
-  const usingReels = P.mode==='reels' && P.reels.length>=12;
-  if(off<=1) return {cls:'scan', txt:`scanning — no exploitable pattern yet, showing the fair baseline.${P.mode!=='reels'?' Try <b>reel entry</b> to expose per-reel structure.':''}`};
-  return {cls:'lock', txt:`<b>PATTERN LOCKED</b> — ${off}/7 numbers off the baseline${usingReels?' (per-reel)':''}. These are real, structure-driven picks.`};
+// the phone's do-no-harm rule, in words: is BET 7 still on the central baseline, or blending ENG in?
+function patternStatus(){
+  const k=trustK(P), g=Math.round(engTrust(P.Wold)*100);
+  if(k>0) return {cls:'lock', txt:`<b>EDGE ${Math.round(k*100)}%</b> — ENG beat the central baseline on its own record, so BET 7 is blending its picks in.`};
+  return {cls:'scan', txt:`<b>safe</b> — BET 7 plays the central baseline until ENG proves an edge (ENG gate ${g}% · ${P.shH||0}/${P.shN||0} ENG hits).${P.mode!=='reels'?' Try <b>reel entry</b> to expose per-reel structure.':''}`};
 }
-function logRow(id,n,result,hit,extra){
-  $(id).insertAdjacentHTML('afterbegin',
-   `<div class="log-row"><span class="neutral">${n}</span><span>${result}</span>`+
-   `<span class="${hit?'hit':'miss'}">${hit?'✓':'—'}</span><span>${extra||''}</span></div>`);
-}
-// the last ~10 results (newest on the right); green = it landed in our 7 that round
+// the last ~10 results (newest on the right); green = it landed in BET 7 that round
 function recentStrip(){
   const lab='<span class="rlab">recent &rarr;</span>';
   const rec=(P.rounds&&P.rounds.length)?P.rounds.slice(-10):null;
-  if(rec) return lab+rec.map((e,i)=>`<span class="rv${e.oh?' hit':''}${i===rec.length-1?' now':''}">${e.s}</span>`).join('');
-  const tail=(P.Hold||[]).slice(-10);
-  return lab+(tail.length?tail.map(v=>`<span class="rv">${v}</span>`).join(''):'<span class="dim">no results yet</span>');
+  if(rec) return lab+rec.map((e,i)=>`<span class="rv${e.oh?' hit':''}${i===rec.length-1?' now':''}">${num(e.s)}</span>`).join('');
+  return lab+'<span class="dim">no results yet</span>';
 }
 function pulse(el){ if(!el)return; el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); }
-function submit(A){ if(!P) return; resolveRound(A, null, true); }       // sum tap = a real live-app result
-function submitReels(rs){ if(!P) return; resolveRound(rs[0]+rs[1]+rs[2], rs, true); }
+function submit(A){ if(!P) return; if(isDemo&&!apTimer) stopAuto(); resolveRound(A, null, !isDemo); }       // sum tap = a real live-app result
+function submitReels(rs){ if(!P) return; if(isDemo&&!apTimer) stopAuto(); resolveRound(rs[0]+rs[1]+rs[2], rs, !isDemo); }
 function resolveRound(actual, reels, toBox){
-  // OLD engine (the live game): did our 7 contain the result?
-  const oldHit=cur.old.list.indexOf(actual)>=0;
-  P.oR++; if(oldHit)P.oH++; if(BASE8set.has(actual))P.bH++;
-  updateWeights(P.Wold,cur.sumDists,actual,K_OLD);                      // sum ensemble keeps learning
-  if(reels && cur.reel){ for(let r=0;r<3;r++) updateWeights(P.Wr[r],cur.reel.per[r].dists,reels[r],3); P.reels.push(reels); }
-  P.Hold.push(actual);
-  // NEW engine: independent provably-fair result vs our tightest 4
-  const res=cur.fair.result, ok=fairVerify(cur.fair), newHit=cur.nw.list.indexOf(res)>=0;
-  P.nR++; if(newHit)P.nH++;
-  updateWeights(P.Wnew,cur.nw.dists,res,K_NEW); P.Hnew.push(res);
-  // streak + per-day
-  P.streak=oldHit?P.streak+1:0; if(P.streak>P.best)P.best=P.streak;
-  const ts=Date.now(); P.lastTs=ts; const dk=dayKey(ts);
-  const dd=P.days[dk]||(P.days[dk]={oH:0,oR:0,bH:0}); dd.oR++; if(oldHit)dd.oH++; if(BASE8set.has(actual))dd.bH++;
-  if(!isDemo) P.rounds.push({t:ts, id:newRoundId(ts), s:actual, r:reels||null, oh:oldHit, nr:res, nh:newHit});  // timestamped log (real rounds only)
-  // feedback
+  const st=applyRound(P,cur,actual,reels||null);        // identical scoring to the phone app
+  if(stories) stories.push(st);
+  P._last={actual,oldHit:st.betHit,engHit:st.engHit,res:st.nr,newHit:st.newHit,ok:st.ok,aiHit:st.aiHit};
   const shown=`${actual}${reels?` <span class="dim">(${reels.join('+')})</span>`:''}`;
-  $('oldOutcome').innerHTML=oldHit?`<span class="hitn">PREDICTED ✓ — ${shown} was in our 7</span>`
-                                  :`<span class="missn">missed — ${shown}</span>`;
-  $('newOutcome').innerHTML=newHit?`<span class="missn">chance hit — ${res}</span>`
-                                  :`<span class="hitn">EVADED ✓ — ${res} not in our 4</span>`;
-  $('newVerify').innerHTML=ok?'<span class="badge">verified</span>':'<span class="missn">VERIFY FAIL</span>';
-  logRow('logL',P.oR,actual,oldHit,'');
-  logRow('logR',P.nR,res,newHit,ok?'<span class="badge"></span>':'!');
+  $('oldOutcome').innerHTML=(st.betHit?`<span class="hitn">BET ✓ — ${shown} was in BET 7</span>`:`<span class="missn">BET missed — ${shown}</span>`)
+    +` · ENG ${st.engHit?'✓':'✗'}`;
+  $('newOutcome').innerHTML=st.newHit?`<span class="missn">chance hit — ${st.nr}</span>`
+                                   :`<span class="hitn">EVADED ✓ — ${st.nr} not in our 4</span>`;
+  $('newVerify').innerHTML=st.ok?'<span class="badge">verified</span>':'<span class="missn">VERIFY FAIL</span>';
   if(toBox) syncHist(actual);
   saveState(); render(); lockRound();
 }
+const tone=(a,b)=>a>=b?'var(--good)':(a>=b-4?'#ffd27f':'var(--bad)');   // green beats baseline, amber near, red below
 function render(){
-  const o=P.oR?P.oH/P.oR:0, b=P.oR?P.bH/P.oR:0, edge=o-b, nn=P.nR?P.nH/P.nR:0;
-  const [olo,ohi]=wilson(P.oH,P.oR);
+  const o=P.oR?P.oH/P.oR:0, b=P.oR?P.bH/P.oR:0, edge=o-b, nn=P.nR?P.nH/P.nR:0, sN=P.shN||0, e=sN?(P.shH||0)/sN:0;
+  const [olo,ohi]=wilson(P.oH,P.oR), g=Math.round(engTrust(P.Wold)*100);
   $('gauges').innerHTML=
-    ring(o*100,BAD,'Our 8 vs OLD engine',`${P.oH}/${P.oR} — verify on the live app`)+
-    ring((1-nn)*100,GOOD,'NEW engine evades',`our 4 land ${(nn*100).toFixed(0)}% — chance`)+
-    ring(Math.max(0,edge*100),STEEL,'Predictive edge on OLD',
-        P.oR?`${(o*100).toFixed(0)}% vs ${(b*100).toFixed(0)}% baseline`:'collecting',
+    ring(o*100,BAD,'BET 7 vs live game',`${P.oH}/${P.oR} hit — the phone's BET row`)+
+    ring(e*100,STEEL,'ENG 7 (engine)',`${P.shH||0}/${sN} hit · gate ${g}%`)+
+    ring((1-nn)*100,GOOD,'NEW 4 evades',`our 4 land ${(nn*100).toFixed(0)}% — chance`)+
+    ring(Math.max(0,edge*100),AMBER,'BET edge vs baseline',
+        P.oR?`${(o*100).toFixed(0)}% vs ${(b*100).toFixed(0)}% central-7`:'collecting',
         (edge>=0?'+':'')+(edge*100).toFixed(0)+'pt');
+  const bp=Math.round(o*100), bb=Math.round(b*100), ep=Math.round(e*100);
+  $('betPct').innerHTML=P.oR?`${bp}%<small>${P.oH}/${P.oR} hit</small>`:'<small>—</small>'; $('betPct').style.color=P.oR?tone(bp,bb):'';
+  $('engPct').innerHTML=sN?`${ep}%<small>${P.shH||0}/${sN} · gate ${g}%</small>`:'<small>—</small>'; $('engPct').style.color=sN?tone(ep,bb):'';
+  $('newPct').innerHTML=P.nR?`${Math.round(nn*100)}%<small>${P.nH}/${P.nR} landed</small>`:'<small>—</small>';
+  const an=P.aiN||0; $('aiPRow').style.display=an?'grid':'none';
+  if(an){ const a=Math.round((P.aiH||0)/an*100), ab=Math.round((P.aiB||0)/an*100);
+    $('aiNote').textContent='AI picks are made on the phone (✦ AI)'; $('aiPct').innerHTML=`${a}%<small>${P.aiH||0}/${an} · base ${ab}%</small>`; $('aiPct').style.color=tone(a,ab); }
   const days=Object.keys(P.days).length;
   let state,label,text;
   if(P.oR<MINN){ state='thin'; label='COLLECTING'; text=`need ≥${MINN} live rounds for a verdict (${P.oR} so far)`; }
-  else if(olo>b){ state='flag'; label='GENUINE EDGE'; text=`our 7 hit ${(o*100).toFixed(0)}% [95% CI ${(olo*100).toFixed(0)}–${(ohi*100).toFixed(0)}], beating the no-skill baseline ${(b*100).toFixed(0)}% — the old engine is predictable.`; }
-  else{ state='clean'; label='NO EDGE YET'; text=`our 7 hit ${(o*100).toFixed(0)}% vs baseline ${(b*100).toFixed(0)}% — within noise, this engine looks fair so far.`; }
+  else if(olo>b){ state='flag'; label='GENUINE EDGE'; text=`BET 7 hit ${(o*100).toFixed(0)}% [95% CI ${(olo*100).toFixed(0)}–${(ohi*100).toFixed(0)}], beating the no-skill baseline ${(b*100).toFixed(0)}% — the game is predictable.`; }
+  else{ state='clean'; label='NO EDGE YET'; text=`BET 7 hit ${(o*100).toFixed(0)}% vs baseline ${(b*100).toFixed(0)}% — within noise, this game looks fair so far.`; }
   $('accStrip').innerHTML=
-    `<span class="ak">live test</span>`+
+    `<span class="ak">${isDemo?'simulation':'live test'}</span>`+
     `<span class="averdict ${state==='flag'?'flag':state==='clean'?'clean':'thin'}">${label}</span>`+
     `<span class="atext">${text}</span>`+
-    `<span class="anote">${P.oR} rounds · ${days} day${days===1?'':'s'} · streak ${P.streak} (best ${P.best}) · saved on this device</span>`;
+    `<span class="anote">${P.oR} rounds · ${days} day${days===1?'':'s'} · streak ${P.streak} (best ${P.best}) · ${isDemo?'not saved':'saved on this device'}</span>`;
   $('counts').innerHTML=`<b>${P.oR}</b> rounds · <b>${days}</b> day${days===1?'':'s'} · streak <b>${P.streak}</b>`;
   // export-backup reminder
   const unsaved=P.oR-(P.lastExport||0), bn=$('backupNote');
-  if(bn){ bn.innerHTML = unsaved>=REMIND_EVERY ? `<span class="bk-warn">&#9888; back up — ${unsaved} new rounds unsaved to file</span>`
+  if(bn){ bn.innerHTML = isDemo ? '' : unsaved>=REMIND_EVERY ? `<span class="bk-warn">&#9888; back up — ${unsaved} new rounds unsaved to file</span>`
         : (P.lastExport>0 ? `<span class="bk-ok">backed up &#10003; · ${unsaved} since</span>` : ''); }
-  if($('btnExport')) $('btnExport').classList.toggle('hi', unsaved>=REMIND_EVERY);
+  if($('btnExport')) $('btnExport').classList.toggle('hi', !isDemo&&unsaved>=REMIND_EVERY);
   if(!isDemo && unsaved>0 && unsaved%REMIND_EVERY===0) toast(`<b>Reminder:</b> ${unsaved} rounds since your last backup — tap <b>export</b> to save a copy you can re-import.`);
-  const bp=P.oR?(b*100).toFixed(0):(baseProb8*100).toFixed(0);
+  const bpx=P.oR?(b*100).toFixed(0):(baseProb8*100).toFixed(0);
   $('edgeNote').innerHTML=
-    `<b>How to read it.</b> The no-skill baseline is what a fixed central-8 cover scores on this exact stream — currently <b>${bp}%</b> `+
-    `(on a fair sum-of-dice game that is ~${(baseProb8*100).toFixed(0)}%). Skill is our 7 landing <em>above</em> ${bp}% with the 95% interval clear of it. `+
-    `On the provably-fair engine the edge stays at zero by construction — the seed is sealed, so there is nothing to learn.`;
+    `<b>How to read it.</b> <b>BET 7</b> is what to play — the central baseline until the engine earns an edge. <b>ENG 7</b> is the engine's own pick, `+
+    `scored every round but only trusted once its record beats the baseline. The no-skill baseline is the central-7 (10–16) on this exact stream — currently <b>${bpx}%</b> `+
+    `(~${(baseProb8*100).toFixed(0)}% on a fair sum-of-dice game). Skill is BET 7 landing <em>above</em> that with the 95% interval clear of it. `+
+    `NEW 4 aims the same engine at the provably-fair result — the seed is sealed, so it can't learn anything. These are the same numbers the phone app shows for the same rounds.`;
+  renderRounds();
   if(focusOpen) renderFocus();
+}
+// round-by-round table — every round's BET 7 / ENG 7 / NEW 4 as they were BEFORE the result
+function renderRounds(){
+  const tb=$('rBody'); if(!tb) return;
+  const all=ensureStories(), n=all.length, list=(showAllRounds?all:all.slice(-40)).slice().reverse();
+  const cell=(arr,cls,hit,res)=>`<span class="mk ${hit?'y':'n'}">${hit?'✓':'—'}</span><span class="betchips">${chips(arr,cls,res)}</span>`;
+  tb.innerHTML=list.map(x=>{ const d=new Date(x.t);
+    const when=d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour12:false});
+    return `<tr><td>${x.i}</td><td class="dim">${isDemo?'sim':when}</td>`+
+      `<td class="res"><b>${num(x.s)}</b>${x.r?` <span class="dim">(${x.r.map(num).join('+')})</span>`:''}</td>`+
+      `<td>${cell(x.bet,'old',x.betHit,x.s)}</td><td>${cell(x.eng,'eng',x.engHit,x.s)}${x.ai?`<div style="margin-top:4px"><span class="mk ${x.aiHit?'y':'n'}">AI</span><span class="betchips">${chips(x.ai,'ai',x.s)}</span></div>`:''}</td>`+
+      `<td class="sy"><span class="betchips">${chips(x.nw,'new',x.nr)}</span> → <b>${num(x.nr)}</b> ${x.newHit?'<span class="missn">hit</span>':'<span class="dim">evaded</span>'}</td></tr>`; }).join('')
+    || '<tr><td colspan="6" class="dim" style="padding:18px">No rounds yet — tap a result, or ▶ simulate.</td></tr>';
+  $('rCount').innerHTML=n?`· ${showAllRounds||n<=40?'all':'last 40 of'} <b>${n}</b>`:'';
+  $('rAll').style.display=n>40?'':'none'; $('rAll').textContent=showAllRounds?'show last 40':'show all';
 }
 function syncHist(v){ const t=$('hist'); t.value=(t.value.trim()?t.value.trim()+',':'')+v; renderHistStats(); }
 
@@ -1035,14 +834,16 @@ function ensureFocus(){
       <div class="focus-head"><span class="fmode" id="fMode">● LIVE</span><span class="fstats" id="fStats"></span>
         <button class="fclose" id="fClose" aria-label="close">&times;</button></div>
       <div class="focus-old">
-        <div class="fp-lab">Old engine · our 7 — <b>check the live game</b></div>
+        <div class="fp-lab">BET 7 — <b>play this</b> · check the live game</div>
         <div class="recent small" id="fRecent"></div>
         <div class="bigchips" id="fOldChips"></div>
+        <div class="fp-lab" style="margin-top:8px">ENG 7 — the engine's own pick</div>
+        <div class="bigchips" id="fEngChips"></div>
         <div class="patline" id="fPattern"></div>
         <div class="fp-out" id="fOldOut">&mdash;</div>
       </div>
       <div class="focus-new">
-        <div class="fp-lab">New engine · Sylox — evades · our 4</div>
+        <div class="fp-lab">NEW 4 · Sylox — evades</div>
         <div class="bigchips" id="fNewChips"></div>
         <div class="fp-out" id="fNewOut">&mdash;</div>
       </div>
@@ -1058,32 +859,33 @@ function closeFocus(){ focusOpen=false; if($('focusOverlay'))$('focusOverlay').s
   document.body.style.overflow=''; }
 function renderFocus(){
   if(!focusOpen||!$('focusOverlay')) return;
-  const o=P.oR?P.oH/P.oR*100:0, b=P.oR?P.bH/P.oR*100:0, e=o-b;
+  const o=P.oR?P.oH/P.oR*100:0, b=P.oR?P.bH/P.oR*100:0, e=o-b, sN=P.shN||0;
   $('fMode').textContent=isDemo?'▮ DEMO':'● LIVE'; $('fMode').className='fmode'+(isDemo?' demo':'');
-  $('fStats').innerHTML=`<b>${P.oR}</b> rnds · our 7 <b>${o.toFixed(0)}%</b> vs ${b.toFixed(0)}% · `+
-    `edge <b>${(e>=0?'+':'')+e.toFixed(0)}pt</b> · streak <b>${P.streak}</b>`;
-  $('fOldChips').innerHTML=chips(cur.old.list,'old');
+  $('fStats').innerHTML=`<b>${P.oR}</b> rnds · BET <b>${o.toFixed(0)}%</b> vs ${b.toFixed(0)}% · `+
+    `ENG <b>${sN?((P.shH||0)/sN*100).toFixed(0):0}%</b> · edge <b>${(e>=0?'+':'')+e.toFixed(0)}pt</b> · streak <b>${P.streak}</b>`;
+  $('fOldChips').innerHTML=chipsP(cur.old.list,cur.old.pool,'old');
+  $('fEngChips').innerHTML=chipsP(cur.old.fullList,cur.old.fullPool,'eng');
   $('fNewChips').innerHTML=chips(cur.nw.list,'new');
-  const ps=patternStatus(cur.old.list);
+  const ps=patternStatus();
   if($('fPattern')){ $('fPattern').className='patline '+ps.cls; $('fPattern').innerHTML=ps.txt; }
   if($('fRecent')) $('fRecent').innerHTML=recentStrip();
   $('fOldOut').innerHTML=$('oldOutcome')?$('oldOutcome').innerHTML:'—';
   $('fNewOut').innerHTML=($('newOutcome')?$('newOutcome').innerHTML:'')+' '+($('newVerify')?$('newVerify').innerHTML:'');
 }
 
-// ---- demo (isolated, never saved): show the engine learning a weak generator ----
+// ---- simulation (isolated, never saved): the SAME app logic on a simulated game ----
+// 'weak' = a recoverable LCG-class engine (real structure); 'fair' = independent draws. The run
+// stays on screen when it finishes (table + gauges) until you press stop or tap a live result.
 function startDemo(kind){
-  stopAuto(); isDemo=true; P=newState(); demoLCG=7;
-  buildArena();                                // fresh arena so live-test rows don't leak in
-  $('modeTag').textContent='▮ DEMO — simulated, not saved'; $('modeTag').classList.add('demo');
-  lockRound(); render();
+  stopAuto(); isDemo=true; P=newState(); stories=[]; demoLCG=7; showAllRounds=false;
+  buildArena(); lockRound(); render();
   let left=+$('aplen').value;
-  apTimer=setInterval(()=>{ if(left--<=0){stopAuto();return;}
+  apTimer=setInterval(()=>{ if(left--<=0){ clearInterval(apTimer); apTimer=null; toast('Simulation finished — <b>stop</b> returns to your live test.'); return; }
     resolveRound(kind==='weak'?weakEngineNext():r3(), null, false); },60);
 }
 function stopAuto(){
   if(apTimer){clearInterval(apTimer);apTimer=null;}
-  if(isDemo){ isDemo=false; P=loadState()||newState(); buildArena(); lockRound(); render(); }
+  if(isDemo){ isDemo=false; P=migrate(loadState()||newState()); stories=null; buildArena(); lockRound(); render(); }
 }
 
 // ---- persistence I/O ----
@@ -1105,7 +907,7 @@ function ensureHistory(){
       <button class="mini" id="hExport">export</button>
       <button class="fclose" id="hClose" aria-label="close">&times;</button></div>
     <div class="hist-scroll"><table class="histtable">
-      <thead><tr><th>#</th><th>date</th><th>time</th><th>result</th><th>our&nbsp;8</th><th>Sylox</th></tr></thead>
+      <thead><tr><th>#</th><th>date</th><th>time</th><th>result</th><th>BET&nbsp;7</th><th>ENG&nbsp;7</th><th>Sylox</th></tr></thead>
       <tbody id="hBody"></tbody></table></div>
     <div class="hist-foot2" id="hFoot"></div></div>`;
   document.body.appendChild(o);
@@ -1115,48 +917,44 @@ function ensureHistory(){
 function openHistory(){ ensureHistory(); $('histOverlay').style.display='flex'; document.body.style.overflow='hidden'; renderHistory(); }
 function closeHistory(){ if($('histOverlay'))$('histOverlay').style.display='none'; document.body.style.overflow=''; }
 function renderHistory(){
-  const rows=P.rounds||[], n=rows.length;
+  const all=ensureStories(), n=all.length;
   $('hCount').innerHTML=`<b>${n}</b> logged round${n===1?'':'s'}`;
-  const show=rows.slice(-1000).reverse();
+  const show=all.slice(-1000).reverse();
   let h='';
-  for(let i=0;i<show.length;i++){ const e=show[i], idx=n-i, d=new Date(e.t);
+  for(const x of show){ const d=new Date(x.t);
     const date=d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
     const time=d.toLocaleTimeString(undefined,{hour12:false});
-    const resTxt=e.s+(e.r?` <span class="dim">(${e.r.join('+')})</span>`:'');
-    h+=`<tr><td>${idx}</td><td>${date}</td><td>${time}</td><td><b>${resTxt}</b></td>`+
-       `<td class="${e.oh?'h-hit':'h-miss'}">${e.oh?'&#10003; predicted':'&mdash;'}</td>`+
-       `<td class="dim">${e.nr}${e.nh?'':' &middot; evaded'}</td></tr>`;
+    const resTxt=num(x.s)+(x.r?` <span class="dim">(${x.r.map(num).join('+')})</span>`:'');
+    h+=`<tr><td>${x.i}</td><td>${date}</td><td>${time}</td><td><b>${resTxt}</b></td>`+
+       `<td class="${x.betHit?'h-hit':'h-miss'}">${x.betHit?'&#10003; hit':'&mdash;'}</td>`+
+       `<td class="${x.engHit?'h-hit':'h-miss'}">${x.engHit?'&#10003; hit':'&mdash;'}</td>`+
+       `<td class="dim">${num(x.nr)}${x.newHit?'':' &middot; evaded'}</td></tr>`;
   }
-  $('hBody').innerHTML=h||'<tr><td colspan="6" class="dim" style="padding:18px">No live rounds yet — tap results to start logging.</td></tr>';
+  $('hBody').innerHTML=h||'<tr><td colspan="7" class="dim" style="padding:18px">No live rounds yet — tap results to start logging.</td></tr>';
   $('hFoot').innerHTML = n>1000 ? `showing the most recent 1000 of ${n} — use <b>export</b> for the full log.`
     : 'Every real result is timestamped and saved on this device. <b>Export</b> for an off-device backup.';
 }
 function importData(file){ const r=new FileReader();
-  r.onload=()=>{ try{const s=JSON.parse(r.result);
-    if(s&&s.v===2){ isDemo=false; P=s; saveState(); buildArena(); lockRound(); render(); }
+  r.onload=()=>{ try{const s=normalize(JSON.parse(r.result));
+    if(s){ isDemo=false; P=migrate(s); stories=null; saveState(); buildArena(); lockRound(); render(); }
     else alert('Not a Sylox live-test export.'); }catch(e){ alert('Could not read that file.'); } };
   r.readAsText(file);
 }
 function resetTest(){
   stopAuto();
-  if(!confirm('Reset the live test? This clears the saved rounds and reseeds from the history box.')) return;
-  try{localStorage.removeItem(LS_KEY);}catch(e){} isDemo=false; P=newState(); buildArena(); lockRound(); render();
+  if(!confirm('Reset the live test? This clears the saved rounds on this device.')) return;
+  try{localStorage.removeItem(LS_KEY);}catch(e){} isDemo=false; P=newState(); stories=null; buildArena(); lockRound(); render();
 }
-function beginSession(){ stopAuto(); isDemo=false; P=loadState()||newState();
-  // self-clean: drop any warm-up/seed rounds so the tool tracks live results only (keeps the observed-history prefix)
-  if(P.rounds && P.rounds.some(r=>r&&r.seed)){
-    const liveR=P.rounds.filter(r=>!(r&&r.seed));
-    const seedHist=(P.Hold||[]).slice(0, Math.max(0,(P.Hold||[]).length - P.rounds.length));
-    const del=P.del; P=rebuildFrom(liveR, seedHist, P.seed, P.created, P.mode||'sum'); P.del=del||[]; saveState();
-  }
-  buildArena(); lockRound(); render(); }
+function beginSession(){ stopAuto(); isDemo=false; const loaded=loadState();
+  P=loaded?migrate(loaded):newState(); if(loaded&&P!==loaded) saveState();   // one-time upgrade to the shared app format
+  stories=null; buildArena(); lockRound(); render(); }
 function toast(msg){ let t=$('toast'); if(!t){ t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   t.innerHTML=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2600); }
 function flashStarted(){
   const o=$('out'); if(o) o.scrollIntoView({behavior:'smooth',block:'start'});
   const sb=document.querySelector('.statusbar'); if(sb){ sb.classList.remove('flash'); void sb.offsetWidth; sb.classList.add('flash'); }
   const restored=loadState();
-  toast(`<b>Session active</b> · ${P.oR} round${P.oR===1?'':'s'} loaded · ${P.mode==='reels'?'reel':'sum'} entry · ${restored?'resumed your saved test':'fresh from history'}`);
+  toast(`<b>Session active</b> · ${P.oR} round${P.oR===1?'':'s'} loaded · ${P.mode==='reels'?'reel':'sum'} entry · ${restored?'resumed your saved test':'new test'}`);
 }
 $('runBtn').onclick=()=>{ beginSession(); flashStarted(); };
 $('runBtn').textContent='Begin / resume session';
