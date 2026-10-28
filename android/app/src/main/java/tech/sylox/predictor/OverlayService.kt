@@ -144,7 +144,16 @@ class OverlayService : Service() {
             // ALWAYS pull the latest UI/logic from GitHub Pages (this is the whole point of
             // the WebView shell). LOAD_DEFAULT cached engine.js, which froze old behaviour.
             settings.cacheMode = WebSettings.LOAD_NO_CACHE
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
             webViewClient = object : WebViewClient() {
+                // the bridge (AI key, screen reader) must only ever face our own site: no navigating away
+                override fun shouldOverrideUrlLoading(view: WebView?, req: android.webkit.WebResourceRequest?): Boolean {
+                    val u = req?.url?.toString() ?: return true
+                    if (u.startsWith(FULL_URL)) return false
+                    startExternal(Intent(Intent.ACTION_VIEW, Uri.parse(u)))   // open elsewhere, not in here
+                    return true
+                }
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     pageUrl = url ?: ""   // the built-in AI key is only handed to our own overlay page
                 }
@@ -242,6 +251,9 @@ class OverlayService : Service() {
         }
 
         // --- auto-read (ScreenReader accessibility service) ---
+        // Screen text is only ever handed to our own overlay page, never to whatever else loads here.
+        private fun trusted() = pageUrl.startsWith(FULL_URL)
+
         @JavascriptInterface
         fun readerOn(): Boolean = ScreenReader.live != null
 
@@ -252,13 +264,13 @@ class OverlayService : Service() {
 
         // JSON {pkg, items:[{t,id,cx,cy}]} of the text the game shows right now ("" if reader is off)
         @JavascriptInterface
-        fun readerScan(): String = ScreenReader.live?.scan() ?: ""
+        fun readerScan(): String = if (trusted()) ScreenReader.live?.scan() ?: "" else ""
 
         @JavascriptInterface
-        fun readerCfg(): String = ScreenReader.live?.config() ?: ""
+        fun readerCfg(): String = if (trusted()) ScreenReader.live?.config() ?: "" else ""
 
         @JavascriptInterface
-        fun readerSet(json: String) { ScreenReader.live?.setConfig(json) }
+        fun readerSet(json: String) { if (trusted()) ScreenReader.live?.setConfig(json) }
 
         @JavascriptInterface
         fun appVersion(): String = Updater.installedName(this@OverlayService)

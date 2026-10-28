@@ -120,7 +120,7 @@ class ScreenReader : AccessibilityService() {
 
     private fun walk(n: AccessibilityNodeInfo?, out: MutableList<TextNode>, depth: Int) {
         if (n == null || depth > 60 || out.size >= 400) return
-        if (n.isVisibleToUser) {
+        if (n.isVisibleToUser && !n.isPassword) {   // never read password fields
             val t = (n.text ?: n.contentDescription)?.toString()?.trim().orEmpty()
             if (t.isNotEmpty()) {
                 val r = Rect(); n.getBoundsInScreen(r)
