@@ -191,6 +191,25 @@ class ScreenReader : AccessibilityService() {
             ?.takeIf { Math.hypot(it.r.exactCenterX() - cx, it.r.exactCenterY() - cy) <= tol }
     }
 
+    /**
+     * Renamed-view fallback: a "d+d+d" node only counts when its own total sits beside it as a
+     * SEPARATE node on the same line (the card layout: "6+0+5" "=" "11"). A chat line or caption
+     * someone typed is one text node, so it can't satisfy this and can't inject a fake result.
+     */
+    private fun cardFallback(nodes: List<TextNode>): Pair<String, String>? {
+        for (n in nodes) {
+            if (!CARD.matches(n.text)) continue
+            val sum = ints(n.text).sum()
+            val tot = nodes.firstOrNull { o ->
+                o !== n && o.text.trim() == sum.toString() &&
+                    o.r.left >= n.r.right && o.r.left - n.r.right < n.r.width() &&
+                    Math.abs(o.r.centerY() - n.r.centerY()) < n.r.height()
+            } ?: continue
+            return n.text to tot.text
+        }
+        return null
+    }
+
     private fun ints(s: String) = Regex("\\d+").findAll(s).map { it.value.toInt() }.toList()
 
     /** Turn the bound nodes' text into (sum, reels) — null when they don't show a valid result yet. */
@@ -232,8 +251,8 @@ class ScreenReader : AccessibilityService() {
         val vals = HashMap<String, String>()
         for (it in items) locate(it, nodes)?.let { n -> vals[it.optString("role")] = n.text }
         val preset = (c.optJSONArray("items")?.length() ?: 0) == 0
-        if (preset && vals["result"] == null)
-            nodes.firstOrNull { CARD.matches(it.text) }?.let { vals["result"] = it.text }
+        if (preset && vals["result"] == null) cardFallback(nodes)?.let { (card, tot) ->
+            vals["result"] = card; vals["total"] = tot }
         val got = interpret(vals)
         if (got == null) {
             // result cleared off screen → the next result counts even if it's the same number
