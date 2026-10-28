@@ -90,6 +90,8 @@
   .rdPanel{margin-top:5px;padding:6px;border:1px solid rgba(var(--eng),.25);border-radius:8px;background:rgba(var(--eng),.05)}
   .rdNote{font-size:10.5px;color:var(--mut);line-height:1.35;margin-bottom:5px;user-select:text}
   .rdNote b{color:var(--ink)}
+  .rdH{font-size:9.5px;color:var(--mut);white-space:nowrap;display:inline-flex;align-items:center;gap:3px;margin:0 4px}
+  .rdH i{width:6px;height:6px;border-radius:50%;display:inline-block}
   .rdList{max-height:150px;overflow-y:auto;margin:5px 0;display:flex;flex-direction:column;gap:2px}
   .rdItem{display:flex;gap:6px;align-items:center;font-size:11px;padding:4px 6px;border-radius:5px;
     background:rgba(255,255,255,.035);cursor:pointer;color:var(--mut)}
@@ -113,7 +115,7 @@
     <div class="row eng"><span class="lab">Eng</span><div class="strip eng" id="eng"></div><span class="pct" id="engPct" title="the engine's own picks — scored every round, only bet once they beat the baseline"></span></div>
     <div class="row eng" id="aiRow" style="display:none"><span class="lab">AI</span><div class="strip ai"><span id="ai"></span></div><span class="pct" id="aiPct" title="how often the AI's 7 held the result (vs the central baseline on the same rounds)"></span></div>
     <div class="sub"><span class="new">New <b id="new"></b> <span id="newPct"></span></span></div>
-    <div class="res"><span class="status" id="status">Tap the result when it lands.</span><span class="recent" id="recent"></span>
+    <div class="res"><span class="status" id="status">Tap the result when it lands.</span><span class="rdH" id="rdH" style="display:none"></span><span class="recent" id="recent"></span>
       <button class="fold" id="fold" title="collapse / expand">▾</button></div>
     <div class="entry">
       <div class="reelLine" id="reelLine" style="display:none"><span id="entryLab">reel digits</span><span class="reelPicks" id="reelPicks"></span></div>
@@ -134,6 +136,8 @@
     </div>
     <div class="rdPanel" id="rdPanel" style="display:none">
       <div class="rdNote" id="rdNote"></div>
+      <div class="rdNote" id="rdStats"></div>
+      <div class="mini" id="rdBat" style="display:none;margin-bottom:5px">allow running in background (battery) — so long sessions aren't cut off</div>
       <div class="aiBtns"><div class="mini" id="rdScan">scan screen</div><div class="mini" id="rdAuto">auto: off</div>
         <div class="mini" id="rdShare">send scan</div></div>
       <div class="rdList" id="rdList"></div>
@@ -408,9 +412,39 @@ if(EMBED){ $('bar').style.display='none'; document.body.style.padding='0'; docum
    with auto on, each new settled result is entered here exactly like a tap (↶ undo still works). */
 const NAT=window.SyloxNative||{}, RD=typeof NAT.readerScan==='function';
 const RD_ROLES=['','result','d1','d2','d3','round'], RD_LAB={result:'result',d1:'reel 1',d2:'reel 2',d3:'reel 3',round:'round no.'};
-let rdScanData=null, rdCfg={pkg:'',auto:false,items:[]}, rdPreset=false, rdLast='';
+let rdScanData=null, rdCfg={pkg:'',auto:false,items:[]}, rdPreset=false, rdLast='', rdLastAt=0, rdGameUp=false;
 function rdLoadCfg(){ try{ const s=NAT.readerCfg(); if(s){ const c=JSON.parse(s); rdCfg={pkg:c.pkg||'',auto:!!c.auto,items:c.items||[]};
-  rdPreset=!!c.preset; rdLast=c.last||''; } }catch(e){} }
+  rdPreset=!!c.preset; rdLast=c.last||''; rdLastAt=+c.lastAt||0; rdGameUp=!!c.gameUp; } }catch(e){} }
+// Digit-stream continuity: state recovery needs CONSECUTIVE rounds, so find unbroken runs.
+// The round interval is learned from auto-read rounds (median gap); a gap > 1.5× it = missed round(s).
+function rdRuns(rs){
+  const dts=[]; for(let i=1;i<rs.length;i++){ const d=rs[i].t-rs[i-1].t; if(rs[i].a&&rs[i-1].a&&d>30e3&&d<180e3) dts.push(d); }
+  dts.sort((a,b)=>a-b); const med=dts.length?dts[dts.length>>1]:70e3, lim=med*1.5;
+  let digits=0, run=0, best=0, missed=0;
+  for(let i=0;i<rs.length;i++){ const e=rs[i], p=rs[i-1], d=p?e.t-p.t:0;
+    if(e.r) digits++;
+    if(p&&p.a&&e.a&&d>lim&&d<15*60e3) missed+=Math.max(1,Math.round(d/med)-1);   // same session, rounds skipped
+    run = e.r ? ((p&&p.r&&d<=lim)?run+1:1) : 0; if(run>best) best=run; }
+  return {digits, run, best, missed, med};
+}
+// HUD dot: is auto-read actually delivering? green = read recently, amber = game closed / waiting, red = stalled
+function rdHealth(){ const el=$('rdH'); if(!el||!P) return;
+  let on=false; try{ on=!!NAT.readerOn(); }catch(e){}
+  if(!on||!rdCfg.auto){ el.style.display='none'; return; }
+  const ago=rdLastAt?Math.round((Date.now()-rdLastAt)/1000):-1, med=rdRuns(P.rounds).med/1000;
+  let c='var(--hit)', t=ago<0?'auto · waiting':`auto ${ago<90?ago+'s':Math.round(ago/60)+'m'}`;
+  if(!rdGameUp){ c='#ffd27f'; t='auto · game closed'; }
+  else if(ago<0) c='#ffd27f';
+  else if(ago>med*2.8) { c='var(--miss)'; t=`no read ${Math.round(ago/60)}m`; }
+  else if(ago>med*1.6) c='#ffd27f';
+  el.style.display=''; el.innerHTML=`<i style="background:${c}"></i>${t}`; el.title='auto-read health — time since the last result was read off the game';
+}
+function rdStatsLine(){ const el=$('rdStats'); if(!el||!P) return; const s=rdRuns(P.rounds);
+  el.innerHTML=`Digit rounds <b>${s.digits}</b> · unbroken run now <b>${s.run}</b> · longest <b>${s.best}</b>`
+    + (s.missed?` · <span style="color:var(--miss)">missed ~${s.missed}</span>`:' · none missed')
+    + ` <span style="color:var(--faint)">(round ≈ ${Math.round(s.med/1000)}s)</span>`;
+  let bat=true; try{ if(NAT.batteryOk) bat=!!NAT.batteryOk(); }catch(e){}
+  $('rdBat').style.display=bat?'none':''; }
 function rdSave(){ try{ NAT.readerSet(JSON.stringify(rdCfg)); }catch(e){} rdLoadCfg(); rdRender(); }
 // a scanned item is "bound" when a saved item points at it (same view id, else same spot on screen)
 function rdRoleOf(it){ const b=rdCfg.items.find(x=>(x.id&&x.id===it.id)||(!x.id&&Math.hypot(x.cx-it.cx,x.cy-it.cy)<.03));
@@ -432,7 +466,7 @@ function rdRender(){ if(!RD) return;
   if(on && rdScanData){ const n=rdScanData.items.length, k=rdScanData.items.filter(x=>/\d/.test(x.t)).length;
     note += n ? `<br>Saw <b>${n}</b> text items (${k} with numbers) from <b>${rdScanData.pkg||'?'}</b>. Tap the one showing the result (or each reel digit) until its tag says so.`
               : `<br>Saw <b>no text</b> from ${rdScanData.pkg||'the game'} — it draws numbers as graphics, so this reader can't see them (needs the screenshot reader). Tap <b>send scan</b> so we can check.`; }
-  $('rdNote').innerHTML=note;
+  $('rdNote').innerHTML=note; rdStatsLine(); rdHealth();
   const s=$('rdSettings'); if(s) s.onclick=()=>{ try{ NAT.readerSettings(); }catch(e){} };
   $('rdAuto').textContent='auto: '+(rdCfg.auto?'ON':'off'); $('rdAuto').classList.toggle('busy',!on||!(rdCfg.items.length||rdPreset));
   $('rdScan').classList.toggle('busy',!on); $('rdShare').classList.toggle('busy',!rdScanData);
@@ -448,13 +482,17 @@ if(RD){
   $('rdScan').onclick=()=>{ try{ const s=NAT.readerScan(); rdScanData=s?JSON.parse(s):null; }catch(e){ rdScanData=null; } rdLoadCfg(); rdRender(); };
   $('rdAuto').onclick=()=>{ rdCfg.auto=!rdCfg.auto; rdSave(); };
   $('rdShare').onclick=()=>{ if(rdScanData&&NAT.share) NAT.share(JSON.stringify({syloxScan:1,at:new Date().toISOString(),...rdScanData})); };
+  $('rdBat').onclick=()=>{ try{ NAT.askBattery(); }catch(e){} };
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&$('rdPanel').style.display!=='none'){ rdLoadCfg(); rdRender(); } });
+  rdLoadCfg(); rdHealth();
+  setInterval(()=>{ rdLoadCfg(); rdHealth(); if($('rdPanel').style.display!=='none') rdStatsLine(); }, 5000);
 }
 // the reader saw a new settled result on the game screen
 window.__sxAuto=function(sum,reels){
   if(!(sum>=0&&sum<=27)) return;
   reelPick=[]; resolve(sum, Array.isArray(reels)&&reels.length===3?reels:null); renderReelPicks();
-  if($('rdPanel').style.display!=='none'){ rdLoadCfg(); rdRender(); }
+  const e=P.rounds[P.rounds.length-1]; if(e){ e.a=1; save(); }   // came from auto-read (feeds gap detection)
+  rdLoadCfg(); rdHealth(); if($('rdPanel').style.display!=='none') rdRender();
   const st=$('status'); if(st) st.innerHTML+=` <span style="color:var(--faint)">· auto${reels?' '+reels.join('+'):''}</span>`;
 };
 

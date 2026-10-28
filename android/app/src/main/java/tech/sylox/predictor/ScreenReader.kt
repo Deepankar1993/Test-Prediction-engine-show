@@ -4,6 +4,9 @@ import android.accessibilityservice.AccessibilityService
 import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -28,6 +31,11 @@ class ScreenReader : AccessibilityService() {
         const val PREFS = "sylox_reader"
         const val KEY_CFG = "cfg"          // {pkg, auto, items:[{role,id,cx,cy}]}
         const val SETTLE_MS = 900L         // value must hold this long (skips rolling-reel animation)
+        const val TICK_MS = 4000L          // watchdog look (the result card stays up ~10s)
+        const val STALE_MS = 200_000L      // ~3 rounds with the game open and nothing read → buzz
+        const val TAG = "SyloxReader"
+        // a "6+0+5" card anywhere in the game: fallback if the game renames its result view
+        private val CARD = Regex("^\\s*\\d\\s*\\+\\s*\\d\\s*\\+\\s*\\d\\s*$")
         private val ROLES = setOf("result", "d1", "d2", "d3", "round", "total")
 
         // Known games: read straight from their result card, no binding needed. Chamet's 0–27 game
@@ -57,11 +65,40 @@ class ScreenReader : AccessibilityService() {
     private var primed = false      // first reading after (re)start is only remembered, not logged
     @Volatile var lastRead = ""     // human-readable last emission, for the overlay status
         private set
+    @Volatile private var lastAt = 0L     // when the last result was handed over
+    @Volatile private var gameUp = false  // game window on screen at the last look
+    private var alerted = false           // stale-read buzz already given for this outage
+    private val checkRun = Runnable { check() }
+
+    // Health watchdog: every few seconds, look again even without an event (safety net for a
+    // missed event), track whether the game is on screen, and buzz once when reads stop.
+    private val tick = object : Runnable {
+        override fun run() {
+            if (cfg.optBoolean("auto")) check()
+            val now = System.currentTimeMillis()
+            if (cfg.optBoolean("auto") && gameUp && lastAt > 0 && now - lastAt > STALE_MS && !alerted) {
+                alerted = true
+                Log.w(TAG, "no result read for ${(now - lastAt) / 1000}s while the game is open")
+                buzz()
+            }
+            h.postDelayed(this, TICK_MS)
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         cfg = loadCfg()
         live = this
+        h.post(tick)
+        OverlayService.live?.setKeepOn(cfg.optBoolean("auto"))
+    }
+
+    private fun buzz() {
+        try {
+            @Suppress("DEPRECATION")
+            val v = getSystemService(VIBRATOR_SERVICE) as Vibrator
+            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 250, 150, 250), -1))
+        } catch (_: Exception) {}
     }
 
     override fun onInterrupt() {}
@@ -79,7 +116,7 @@ class ScreenReader : AccessibilityService() {
     // "preset" tells the overlay auto can run without the user binding anything
     fun config(): String = JSONObject(cfg.toString())
         .put("preset", (cfg.optJSONArray("items")?.length() ?: 0) == 0 && PRESETS.containsKey(gamePkg(cfg)))
-        .put("last", lastRead).toString()
+        .put("last", lastRead).put("lastAt", lastAt).put("gameUp", gameUp).toString()
 
     /** Save the binding chosen in the overlay; only known roles are kept. */
     fun setConfig(json: String) {
@@ -94,7 +131,8 @@ class ScreenReader : AccessibilityService() {
         c.put("auto", inc.optBoolean("auto") && itemsOf(c).isNotEmpty())
         cfg = c
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_CFG, c.toString()).apply()
-        h.post { lastSig = ""; pendSig = ""; primed = false }
+        h.post { lastSig = ""; pendSig = ""; primed = false; alerted = false }
+        OverlayService.live?.setKeepOn(c.optBoolean("auto"))   // auto on → screen stays awake
     }
 
     // ---------------------------------------------------------------- reading the screen
@@ -180,8 +218,8 @@ class ScreenReader : AccessibilityService() {
         val c = cfg
         if (!c.optBoolean("auto")) return
         if (e?.packageName?.toString() != gamePkg(c)) return
-        h.removeCallbacksAndMessages(null)
-        h.postDelayed({ check() }, 120)   // coalesce bursts of change events
+        h.removeCallbacks(checkRun)
+        h.postDelayed(checkRun, 120)   // coalesce bursts of change events
     }
 
     private fun check() {
@@ -189,9 +227,13 @@ class ScreenReader : AccessibilityService() {
         val items = itemsOf(c)
         if (items.isEmpty()) return
         val (pkg, nodes) = read()
-        if (pkg != gamePkg(c)) return
+        gameUp = pkg == gamePkg(c)
+        if (!gameUp) return
         val vals = HashMap<String, String>()
         for (it in items) locate(it, nodes)?.let { n -> vals[it.optString("role")] = n.text }
+        val preset = (c.optJSONArray("items")?.length() ?: 0) == 0
+        if (preset && vals["result"] == null)
+            nodes.firstOrNull { CARD.matches(it.text) }?.let { vals["result"] = it.text }
         val got = interpret(vals)
         if (got == null) {
             // result cleared off screen → the next result counts even if it's the same number
@@ -206,12 +248,15 @@ class ScreenReader : AccessibilityService() {
         val now = System.currentTimeMillis()
         if (sig != pendSig) { pendSig = sig; pendAt = now }
         if (now - pendAt < SETTLE_MS) {
-            h.postDelayed({ check() }, SETTLE_MS - (now - pendAt) + 50)   // re-check once settled
+            h.removeCallbacks(checkRun)
+            h.postDelayed(checkRun, SETTLE_MS - (now - pendAt) + 50)   // re-check once settled
             return
         }
         lastSig = sig; pendSig = ""
         val (sum, reels) = got
         lastRead = if (reels != null) "${reels.joinToString("+")}=$sum" else "$sum"
+        Log.i(TAG, "read $lastRead" + (if (lastAt > 0) " (+${(now - lastAt) / 1000}s)" else ""))
+        lastAt = now; alerted = false
         OverlayService.live?.pushAuto(sum, reels)
     }
 }

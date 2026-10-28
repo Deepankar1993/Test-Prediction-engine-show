@@ -171,6 +171,12 @@ class OverlayService : Service() {
         container.addView(w)
         root = container
         wm.addView(container, lp)
+        // reader already running with auto on (e.g. window re-opened after an update) → stay awake
+        try {
+            val c = JSONObject(getSharedPreferences(ScreenReader.PREFS, MODE_PRIVATE)
+                .getString(ScreenReader.KEY_CFG, "{}") ?: "{}")
+            if (c.optBoolean("auto") && ScreenReader.live != null) setKeepOn(true)
+        } catch (_: Exception) {}
     }
 
     /** Push imported JSON (from FileActivity) into the overlay's saved test. */
@@ -178,6 +184,18 @@ class OverlayService : Service() {
         val w = web ?: return
         Handler(mainLooper).post {
             w.evaluateJavascript("window.__sxImport(" + JSONObject.quote(json) + ")", null)
+        }
+    }
+
+    /** While auto-read is on, keep the screen awake so rounds aren't lost to the screen timeout. */
+    fun setKeepOn(on: Boolean) {
+        Handler(mainLooper).post {
+            val r = root ?: return@post
+            val f = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            val nf = if (on) lp.flags or f else lp.flags and f.inv()
+            if (nf == lp.flags) return@post
+            lp.flags = nf
+            try { wm.updateViewLayout(r, lp) } catch (_: Exception) {}
         }
     }
 
@@ -271,6 +289,17 @@ class OverlayService : Service() {
 
         @JavascriptInterface
         fun readerSet(json: String) { if (trusted()) ScreenReader.live?.setConfig(json) }
+
+        // battery optimisation can kill long auto-read sessions; true = already exempt
+        @JavascriptInterface
+        fun batteryOk(): Boolean = (getSystemService(POWER_SERVICE) as android.os.PowerManager)
+            .isIgnoringBatteryOptimizations(packageName)
+
+        @JavascriptInterface
+        fun askBattery() {
+            startExternal(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:$packageName")))
+        }
 
         @JavascriptInterface
         fun appVersion(): String = Updater.installedName(this@OverlayService)

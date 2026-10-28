@@ -9,6 +9,9 @@
     <!-- self-update: install newer signed APKs from the GitHub app-latest release -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- auto-read: buzz when results stop arriving; ask to be spared from battery optimisation -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
