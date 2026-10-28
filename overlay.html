@@ -87,7 +87,18 @@
   .aiSet{display:flex;flex-direction:column;gap:4px;margin-top:5px}
   .aiPair{display:flex;gap:4px}
   .aiPair label{flex:1;font-size:9px;color:var(--faint)}
-  .folded .entry,.folded .tools,.folded .menu,.folded .row.eng,.folded .sub,.folded .syncRow,.folded .aiPanel{display:none!important}
+  .rdPanel{margin-top:5px;padding:6px;border:1px solid rgba(var(--eng),.25);border-radius:8px;background:rgba(var(--eng),.05)}
+  .rdNote{font-size:10.5px;color:var(--mut);line-height:1.35;margin-bottom:5px;user-select:text}
+  .rdNote b{color:var(--ink)}
+  .rdList{max-height:150px;overflow-y:auto;margin:5px 0;display:flex;flex-direction:column;gap:2px}
+  .rdItem{display:flex;gap:6px;align-items:center;font-size:11px;padding:4px 6px;border-radius:5px;
+    background:rgba(255,255,255,.035);cursor:pointer;color:var(--mut)}
+  .rdItem.num{color:var(--ink)}
+  .rdItem .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rdItem .role{font-size:9.5px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.06);color:var(--faint)}
+  .rdItem.on{background:rgba(var(--eng),.16)}
+  .rdItem.on .role{background:rgb(var(--eng));color:#08121f;font-weight:700}
+  .folded .entry,.folded .tools,.folded .menu,.folded .row.eng,.folded .sub,.folded .syncRow,.folded .aiPanel,.folded .rdPanel{display:none!important}
   @media (prefers-reduced-motion:reduce){.pad .n:active{transform:none}}
 </style>
 </head>
@@ -119,6 +130,13 @@
       <div class="mini" id="exp">export</div>
       <div class="mini" id="imp">import</div>
       <div class="mini" id="open">full tool</div>
+      <div class="mini" id="rdBtn" style="display:none">auto-read</div>
+    </div>
+    <div class="rdPanel" id="rdPanel" style="display:none">
+      <div class="rdNote" id="rdNote"></div>
+      <div class="aiBtns"><div class="mini" id="rdScan">scan screen</div><div class="mini" id="rdAuto">auto: off</div>
+        <div class="mini" id="rdShare">send scan</div></div>
+      <div class="rdList" id="rdList"></div>
     </div>
     <div class="syncRow" id="syncRow" style="display:none">
       <input id="syncCode" placeholder="sync code — same on both devices" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -385,6 +403,61 @@ $('aiSave').onclick=()=>{ SYLOX_AI.setCfg({ key:$('aiKey').value.trim(), ws:$('a
 const EMBED=new URLSearchParams(location.search).has('app');
 if(EMBED){ $('bar').style.display='none'; document.body.style.padding='0'; document.documentElement.style.background='transparent'; }
 // report our height to the native shell so the floating window hugs the content (no dead-zone)
+/* auto-read: the app's ScreenReader (Android accessibility service) reads the game's on-screen text.
+   scan → list what it can see; tap an item to say which is the result / reel digit / round no.;
+   with auto on, each new settled result is entered here exactly like a tap (↶ undo still works). */
+const NAT=window.SyloxNative||{}, RD=typeof NAT.readerScan==='function';
+const RD_ROLES=['','result','d1','d2','d3','round'], RD_LAB={result:'result',d1:'reel 1',d2:'reel 2',d3:'reel 3',round:'round no.'};
+let rdScanData=null, rdCfg={pkg:'',auto:false,items:[]}, rdPreset=false, rdLast='';
+function rdLoadCfg(){ try{ const s=NAT.readerCfg(); if(s){ const c=JSON.parse(s); rdCfg={pkg:c.pkg||'',auto:!!c.auto,items:c.items||[]};
+  rdPreset=!!c.preset; rdLast=c.last||''; } }catch(e){} }
+function rdSave(){ try{ NAT.readerSet(JSON.stringify(rdCfg)); }catch(e){} rdLoadCfg(); rdRender(); }
+// a scanned item is "bound" when a saved item points at it (same view id, else same spot on screen)
+function rdRoleOf(it){ const b=rdCfg.items.find(x=>(x.id&&x.id===it.id)||(!x.id&&Math.hypot(x.cx-it.cx,x.cy-it.cy)<.03));
+  return b?b.role:''; }
+function rdCycle(it){ const r=rdRoleOf(it), taken=new Set(rdCfg.items.map(x=>x.role).filter(x=>x!==r));
+  let i=RD_ROLES.indexOf(r), next;   // next tag in the cycle that no other item already holds
+  do{ i=(i+1)%RD_ROLES.length; next=RD_ROLES[i]; }while(next&&taken.has(next));
+  rdCfg.items=rdCfg.items.filter(x=>x.role!==r);   // one node per role
+  if(next) rdCfg.items.push({role:next,id:it.id||'',cx:it.cx,cy:it.cy});
+  rdCfg.pkg=(rdScanData&&rdScanData.pkg)||rdCfg.pkg; rdSave(); }
+function rdRender(){ if(!RD) return;
+  let on=false; try{ on=!!NAT.readerOn(); }catch(e){}
+  const bound=rdCfg.items.map(x=>RD_LAB[x.role]).join(', ');
+  let note = !on
+    ? 'Auto-read is <b>off</b>. Turn on <b>Sylox auto-read</b> in Accessibility → Installed apps, then come back. <span class="mini" id="rdSettings" style="display:inline-block;padding:2px 8px;margin-left:4px">open settings</span>'
+    : `Auto-read is <b>on</b>${rdCfg.pkg?` · game <b>${rdCfg.pkg}</b>`:''}${bound?` · reading ${bound}`
+        :(rdPreset?' · reads the Chamet result card (<b>6+0+5 = 11</b>) by itself — just switch auto on':' · nothing chosen yet')}.`
+      + (rdLast?` Last read: <b>${rdLast}</b>.`:'');
+  if(on && rdScanData){ const n=rdScanData.items.length, k=rdScanData.items.filter(x=>/\d/.test(x.t)).length;
+    note += n ? `<br>Saw <b>${n}</b> text items (${k} with numbers) from <b>${rdScanData.pkg||'?'}</b>. Tap the one showing the result (or each reel digit) until its tag says so.`
+              : `<br>Saw <b>no text</b> from ${rdScanData.pkg||'the game'} — it draws numbers as graphics, so this reader can't see them (needs the screenshot reader). Tap <b>send scan</b> so we can check.`; }
+  $('rdNote').innerHTML=note;
+  const s=$('rdSettings'); if(s) s.onclick=()=>{ try{ NAT.readerSettings(); }catch(e){} };
+  $('rdAuto').textContent='auto: '+(rdCfg.auto?'ON':'off'); $('rdAuto').classList.toggle('busy',!on||!(rdCfg.items.length||rdPreset));
+  $('rdScan').classList.toggle('busy',!on); $('rdShare').classList.toggle('busy',!rdScanData);
+  const items=rdScanData?rdScanData.items.slice().sort((a,b)=>(/\d/.test(b.t)-/\d/.test(a.t))||(a.cy-b.cy)).slice(0,80):[];
+  $('rdList').innerHTML=items.map((it,i)=>{ const r=rdRoleOf(it);
+    return `<div class="rdItem${/\d/.test(it.t)?' num':''}${r?' on':''}" data-i="${i}"><span class="t"></span><span class="role">${r?RD_LAB[r]:'tap to pick'}</span></div>`; }).join('');
+  $('rdList').querySelectorAll('.rdItem').forEach(el=>{ const it=items[+el.dataset.i]; el.querySelector('.t').textContent=it.t; el.onclick=()=>rdCycle(it); });
+  requestAnimationFrame(reportHeight);
+}
+if(RD){
+  $('rdBtn').style.display='';
+  $('rdBtn').onclick=()=>{ const p=$('rdPanel'), show=p.style.display==='none'; p.style.display=show?'block':'none'; if(show){ rdLoadCfg(); rdRender(); } else requestAnimationFrame(reportHeight); };
+  $('rdScan').onclick=()=>{ try{ const s=NAT.readerScan(); rdScanData=s?JSON.parse(s):null; }catch(e){ rdScanData=null; } rdLoadCfg(); rdRender(); };
+  $('rdAuto').onclick=()=>{ rdCfg.auto=!rdCfg.auto; rdSave(); };
+  $('rdShare').onclick=()=>{ if(rdScanData&&NAT.share) NAT.share(JSON.stringify({syloxScan:1,at:new Date().toISOString(),...rdScanData})); };
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&$('rdPanel').style.display!=='none'){ rdLoadCfg(); rdRender(); } });
+}
+// the reader saw a new settled result on the game screen
+window.__sxAuto=function(sum,reels){
+  if(!(sum>=0&&sum<=27)) return;
+  reelPick=[]; resolve(sum, Array.isArray(reels)&&reels.length===3?reels:null); renderReelPicks();
+  if($('rdPanel').style.display!=='none'){ rdLoadCfg(); rdRender(); }
+  const st=$('status'); if(st) st.innerHTML+=` <span style="color:var(--faint)">· auto${reels?' '+reels.join('+'):''}</span>`;
+};
+
 function reportHeight(){ try{ if(window.SyloxNative&&SyloxNative.resize){
   SyloxNative.resize(Math.ceil(document.getElementById('ov').getBoundingClientRect().height)); } }catch(e){} }
 const _render=render; render=function(){ _render(); requestAnimationFrame(reportHeight); };

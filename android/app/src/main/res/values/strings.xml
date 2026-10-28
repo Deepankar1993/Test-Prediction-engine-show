@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Sylox Predictor</string>
+    <string name="reader_label">Sylox auto-read</string>
+    <string name="reader_desc">Reads the result numbers shown by the game you are playing and logs them in the Sylox floating window, so you don\'t have to tap them in. It only reads on-screen text, never types or taps, and sends nothing off the phone.</string>
 </resources>

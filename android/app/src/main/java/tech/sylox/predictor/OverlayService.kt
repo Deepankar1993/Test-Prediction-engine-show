@@ -172,6 +172,15 @@ class OverlayService : Service() {
         }
     }
 
+    /** Auto-read (ScreenReader) saw a new result on the game screen: enter it like a tap would. */
+    fun pushAuto(sum: Int, reels: IntArray?) {
+        val w = web ?: return
+        val r = reels?.joinToString(",", "[", "]") ?: "null"
+        Handler(mainLooper).post {
+            w.evaluateJavascript("window.__sxAuto&&window.__sxAuto($sum,$r)", null)
+        }
+    }
+
     /**
      * Make the floating window focusable (so the soft keyboard can attach) while the user types
      * the sync code, then restore the normal not-focusable, touch-pass-through state. Without
@@ -231,6 +240,25 @@ class OverlayService : Service() {
                 (hex.substring(i * 2, i * 2 + 2).toInt(16) xor mask[i % mask.length].code).toByte() }
             return String(out, Charsets.UTF_8)
         }
+
+        // --- auto-read (ScreenReader accessibility service) ---
+        @JavascriptInterface
+        fun readerOn(): Boolean = ScreenReader.live != null
+
+        @JavascriptInterface
+        fun readerSettings() {
+            startExternal(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+
+        // JSON {pkg, items:[{t,id,cx,cy}]} of the text the game shows right now ("" if reader is off)
+        @JavascriptInterface
+        fun readerScan(): String = ScreenReader.live?.scan() ?: ""
+
+        @JavascriptInterface
+        fun readerCfg(): String = ScreenReader.live?.config() ?: ""
+
+        @JavascriptInterface
+        fun readerSet(json: String) { ScreenReader.live?.setConfig(json) }
 
         @JavascriptInterface
         fun appVersion(): String = Updater.installedName(this@OverlayService)
