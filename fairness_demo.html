@@ -365,8 +365,10 @@
   .recent .rlab{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:2px}
   .recent .rv{font-family:var(--mono);font-size:12.5px;min-width:25px;text-align:center;padding:3px 6px;border-radius:5px;
     background:#0d1722;border:1px solid var(--line-soft);color:var(--muted);transition:.15s}
-  .recent .rv.hit{border-color:#1c4a3b;color:var(--good)}
-  .recent .rv.now{outline:2px solid var(--steel);outline-offset:1px;color:var(--text);font-weight:600}
+  .recent .rv.hit{border-color:#1c4a3b;color:var(--good)}   /* ENG held it (alone or with BET) */
+  .recent .rv.bet{border-color:#4a3c1c;color:#e0b35a}        /* only BET held it */
+  .recent .rv.now{outline:2px solid var(--steel);outline-offset:1px;font-weight:600}
+  .recent .rv.now:not(.hit):not(.bet){color:var(--text)}
   .recent.small{margin:6px 0 0;gap:4px}
   .recent.small .rlab{font-size:9px;margin-right:1px}
   .recent.small .rv{font-size:10.5px;min-width:19px;padding:2px 4px;border-radius:4px}
@@ -745,7 +747,7 @@ function patternStatus(){
 function recentStrip(){
   const lab='<span class="rlab">recent &rarr;</span>';
   const rec=(P.rounds&&P.rounds.length)?P.rounds.slice(-10):null;
-  if(rec) return lab+rec.map((e,i)=>`<span class="rv${e.oh?' hit':''}${i===rec.length-1?' now':''}">${num(e.s)}</span>`).join('');
+  if(rec) return lab+rec.map((e,i)=>`<span class="rv${e.eh?' hit':e.oh?' bet':''}${i===rec.length-1?' now':''}">${num(e.s)}</span>`).join('');
   return lab+'<span class="dim">no results yet</span>';
 }
 function pulse(el){ if(!el)return; el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); }

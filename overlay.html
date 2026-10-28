@@ -48,8 +48,10 @@
   .status .hit{color:var(--hit);font-weight:700} .status .miss{color:var(--miss);font-weight:700}
   .recent{display:flex;gap:2px}
   .recent .rv{min-width:19px;text-align:center;font-size:10.5px;padding:1px 3px;border-radius:4px;color:var(--faint);background:rgba(255,255,255,.04)}
-  .recent .rv.h{color:var(--hit)}
-  .recent .rv.now{color:var(--ink);box-shadow:inset 0 0 0 1px rgba(var(--eng),.6)}
+  .recent .rv.h{color:var(--hit);background:rgba(61,220,151,.12)}   /* ENG held it (alone or with BET) */
+  .recent .rv.b{color:rgb(var(--bet));background:rgba(var(--bet),.12)}   /* only BET held it */
+  .recent .rv.now{box-shadow:inset 0 0 0 1px rgba(var(--eng),.6)}
+  .recent .rv.now:not(.h):not(.b){color:var(--ink)}   /* the latest keeps its hit colour */
   .fold{background:none;border:0;color:var(--mut);font-size:13px;width:22px;height:22px;border-radius:6px}
   .fold:active{background:rgba(255,255,255,.08)}
 
@@ -224,7 +226,8 @@ function render(){
       + ` · Eng ${L.engHit?'✓':'✗'}` + (L.aiHit==null?'':` · AI ${L.aiHit?'✓':'✗'}`)
     : (P.oR?'Tap the result when it lands.':'Tap the first result to start.');
   const rec=P.rounds.slice(-5);
-  $('recent').innerHTML=rec.map((e,i)=>`<span class="rv${e.oh?' h':''}${i===rec.length-1?' now':''}">${Number(e.s)|0}</span>`).join('');
+  // green = ENG held it (alone or with BET) · gold = only BET held it · plain = full miss
+  $('recent').innerHTML=rec.map((e,i)=>`<span class="rv${e.eh?' h':e.oh?' b':''}${i===rec.length-1?' now':''}" title="${e.eh?(e.oh?'ENG + BET hit':'ENG hit'):e.oh?'BET hit only':'miss'}">${Number(e.s)|0}</span>`).join('');
 }
 let reelPick=[];
 function buildPad(){

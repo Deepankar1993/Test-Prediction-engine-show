@@ -10,7 +10,7 @@
    ENG tuning that was live at that time, so the history is never scored with hindsight. */
 window.SYLOX_CORE = (function () {
   const K_OLD = 7, K_NEW = 4, CONF_THR = 0.15;   // CONF_THR = "the engine is sure" cutoff for the trust meter
-  const ENGV = 3;   // bump when scoring changes -> stored stats are replayed once from the round log (v3: ENG row = raw live picks)
+  const ENGV = 4;   // bump when scoring changes -> stored stats are replayed once from the round log (v3: ENG row = raw live picks; v4: per-round ENG hit e.eh)
   const BASE7 = new Set(topK(PRIOR, K_OLD));     // the no-skill central-7 block (10-16)
   const dayKey = ts => { const d = new Date(ts); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
 
@@ -87,6 +87,7 @@ window.SYLOX_CORE = (function () {
     const ts = entry ? entry.t : Date.now(); s.lastTs = ts; const dk = dayKey(ts);
     const dd = s.days[dk] || (s.days[dk] = { oH: 0, oR: 0, bH: 0 }); dd.oR++; if (betHit) dd.oH++; if (BASE7.has(actual)) dd.bH++;
     const e = entry || { t: ts, id: newRoundId(ts), s: actual, r: reels || null, oh: betHit, nr: res, nh: newHit, ai: cur.ai || null };
+    e.eh = engHit;   // ENG row held it (the recent strip colours ENG vs BET-only hits); replay back-fills it
     s.rounds.push(e);
     return { i: s.rounds.length, t: ts, s: actual, r: reels || null, bet: cur.old.list.slice(), eng: cur.old.fullList.slice(),
       nw: cur.nw.list.slice(), nr: res, ai: cur.ai, betHit, engHit, newHit, aiHit: cur.ai ? cur.ai.indexOf(actual) >= 0 : null,
