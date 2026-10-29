@@ -313,9 +313,30 @@ class ScreenReader : AccessibilityService() {
     private fun winnerOf(text: String) =
         lineup.sortedByDescending { it.length }.firstOrNull { text.contains("$it won, Next") }
 
+    private var myBets = listOf<Long>()   // your own stake on each car of the lineup (tv_myBet)
+    private fun num(s: String) = s.filter { it.isDigit() }.toLongOrNull() ?: 0L
+
+    /**
+     * "YOU WIN · Reward 7" (winPrizeView) names no car. The winner is the car of yours whose payout
+     * — your stake × total pool ÷ that car's pool (bet_diamond, same left→right order as the cards),
+     * less the house cut — matches the reward. Only one car of yours → it's that one.
+     */
+    private fun winFromReward(nodes: List<TextNode>): String? {
+        val reward = byId(nodes, "winPrizeView").firstOrNull()?.let { num(it.text) } ?: return null
+        val mine = lineup.indices.filter { myBets.getOrElse(it) { 0L } > 0 }
+        if (reward <= 0 || mine.isEmpty() || lineup.size != 3) return null
+        if (mine.size == 1) return lineup[mine[0]]
+        val pools = byId(nodes, "bet_diamond").map { num(it.text) }
+        if (pools.size != 3 || pools.any { it <= 0 }) return null
+        val total = pools.sum().toDouble()
+        val best = mine.minByOrNull { i -> Math.abs(Math.log(reward / (myBets[i] * total / pools[i]))) } ?: return null
+        val ratio = reward / (myBets[best] * total / pools[best])
+        return if (ratio in 0.7..1.05) lineup[best] else { Log.w(TAG, "win reward $reward fits no car (best ratio $ratio)"); null }
+    }
+
     private fun raceCheck(nodes: List<TextNode>): Boolean {
         val bn = banner(nodes)
-        val won = bn?.let { winnerOf(it.text) }
+        val won = bn?.let { winnerOf(it.text) } ?: winFromReward(nodes)
         if (bn != null && won == null && raceWon != bn.text.substringBefore(", Next")) {
             raceWon = bn.text.substringBefore(", Next"); Log.w(TAG, "result banner not matched to the lineup $lineup: ${bn.text.take(60)}")
             return true
@@ -332,9 +353,12 @@ class ScreenReader : AccessibilityService() {
             return true
         }
         val cars = byId(nodes, "tv_car_name")
-        if (cars.size != 3) { if (raceWon.isNotEmpty() && banner(nodes) == null) raceWon = ""; return false }
+        if (cars.size != 3) {
+            if (raceWon.isNotEmpty() && banner(nodes) == null && byId(nodes, "winPrizeView").isEmpty()) raceWon = ""
+            return false }
         raceWon = ""
         lineup = cars.map { it.text }
+        myBets = byId(nodes, "tv_myBet").map { num(it.text) }
         val dm = resources.displayMetrics
         val sign = byId(nodes, "tv_track_sign").firstOrNull()
         val idx = sign?.let { (it.r.exactCenterX() / dm.widthPixels * 3).toInt().coerceIn(0, 2) } ?: -1
