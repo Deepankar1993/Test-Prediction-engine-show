@@ -100,8 +100,11 @@ window.SYLOX_RACE = (function () {
       ready: n >= MIN_N }; }
 
   // A betting-phase reading: predict now (it's re-done as odds move; the last one before the race counts).
+  const NAME = /^[A-Za-z0-9 ]{1,24}$/;   // vehicle names as the game prints them; anything else is junk
   function forecast(s, st) {
-    const cars = st.cars || [], odds = (st.odds || []).map(parseOdds);
+    const cars = (st.cars || []).map(n => (NAME.test(n) ? n : '?')), odds = (st.odds || []).map(parseOdds);
+    const road = ROADS.indexOf(st.road) >= 0 ? st.road : '', ri = road ? (+st.roadIdx | 0) : -1;
+    st = Object.assign({}, st, { road, roadIdx: ri });
     const p = predict(cars, st.road, st.roadIdx, s.params);
     const pick = cars[p.indexOf(Math.max(...p))];
     const ev = cars.map((n, i) => odds[i].live ? p[i] * odds[i].live - 1 : null);
@@ -111,7 +114,7 @@ window.SYLOX_RACE = (function () {
   }
   // The result banner: score the last forecast for that same lineup, log it, refit for next time.
   function settle(s, pending, winner) {
-    if (!pending || pending.cars.indexOf(winner) < 0) return null;
+    if (!pending || !NAME.test(winner || '') || pending.cars.indexOf(winner) < 0) return null;
     const r = Object.assign({}, pending, { winner }); delete r.ev;
     s.races.push(r);
     s.params.prior = fitPrior(s.races);

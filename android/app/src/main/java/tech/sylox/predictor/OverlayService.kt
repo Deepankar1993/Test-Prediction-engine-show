@@ -202,7 +202,10 @@ class OverlayService : Service() {
     /** Car race state/result from the reader → the overlay's race engine (JSON object literal). */
     fun pushRace(json: String) {
         val w = web ?: return
-        Handler(mainLooper).post { w.evaluateJavascript("window.__sxRace&&window.__sxRace($json)", null) }
+        // passed as a quoted JS string and parsed there — screen text never becomes JS source
+        Handler(mainLooper).post {
+            w.evaluateJavascript("window.__sxRace&&window.__sxRace(JSON.parse(" + JSONObject.quote(json) + "))", null)
+        }
     }
 
     /** Auto-read (ScreenReader) saw a new result on the game screen: enter it like a tap would. */

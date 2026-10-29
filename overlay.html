@@ -520,9 +520,10 @@ if(RD){
    the winner banner ({type:'result', winner}). race.js turns the latest pre-race state into P(win)
    per car; that forecast is what gets scored when the banner appears (never re-scored afterwards). */
 const RC=window.SYLOX_RACE; let rcS=null, rcPending=null, rcLast=null, rcSeen=0;
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));   // screen text is untrusted
 function rcMode(on){ $('ov').classList.toggle('racing',!!on); requestAnimationFrame(reportHeight); }
 function rcRender(){ if(!RC) return; const f=rcPending, st=RC.stats(rcS);
-  $('rRoad').innerHTML = f ? (f.road?`<b>${f.road}</b> on road ${f.ri+1}/3 · other 2 hidden`:'road hidden') : 'waiting for the next race';
+  $('rRoad').innerHTML = f ? (f.road?`<b>${esc(f.road)}</b> on road ${f.ri+1}/3 · other 2 hidden`:'road hidden') : 'waiting for the next race';
   $('rCd').textContent = f && f.cd>=0 ? f.cd+'s' : '';
   $('rCars').innerHTML = f ? f.cars.map((n,i)=>{ const ev=f.ev[i];
     return `<div class="rCar${n===f.pick?' pick':''}"><div class="nm"></div><div class="pw">${Math.round(f.p[i]*100)}%</div>`
@@ -535,7 +536,7 @@ function rcRender(){ if(!RC) return; const f=rcPending, st=RC.stats(rcS);
       + (st.roi!=null?` · flat-bet ROI <b style="color:${st.roi>0?'var(--hit)':'var(--miss)'}">${st.roi>0?'+':''}${Math.round(st.roi*100)}%</b>`:'')
       + (st.ready?'':` <span style="color:var(--faint)">· collecting ${st.n}/${RC.MIN_N} — % and EV are the model's guess, unproven</span>`)
     : `Logging races… % and EV are the model's guess, unproven until ${RC.MIN_N} races are scored.`;
-  $('rLast').innerHTML = rcLast ? `Last: <b>${rcLast.winner}</b> won · engine ${rcLast.pick===rcLast.winner?'<span class="hit">✓</span>':'<span class="miss">✗</span>'} (picked ${rcLast.pick})` : '';
+  $('rLast').innerHTML = rcLast ? `Last: <b>${esc(rcLast.winner)}</b> won · engine ${rcLast.pick===rcLast.winner?'<span class="hit">✓</span>':'<span class="miss">✗</span>'} (picked ${esc(rcLast.pick)})` : '';
   requestAnimationFrame(reportHeight);
 }
 window.__sxRace=function(m){ if(!RC||!m) return; rcS=rcS||RC.load(); rcSeen=Date.now(); rcMode(true);
