@@ -238,9 +238,15 @@ class ScreenReader : AccessibilityService() {
         val c = cfg
         if (!c.optBoolean("auto")) return
         if (e?.packageName?.toString() != gamePkg(c)) return
-        h.removeCallbacks(checkRun)
-        h.postDelayed(checkRun, 120)   // coalesce bursts of change events
+        // throttle, don't debounce: animations fire events nonstop, and restarting the delay on every
+        // event meant a look only happened once the screen went still — after Lucky28-Pro's < 1 s card
+        // was already gone. Now: at most one look per 200 ms (battery), never postponed.
+        if (throttled) return
+        throttled = true
+        h.postDelayed(throttleRun, 200)
     }
+    @Volatile private var throttled = false
+    private val throttleRun = Runnable { throttled = false; check() }
 
     private fun check() {
         val c = cfg
@@ -260,6 +266,7 @@ class ScreenReader : AccessibilityService() {
         val pro = preset && nodes.any { it.id == "$CHAMET:id/tvResultNum" }
         if (pro && vals["total"] == null) nodes.firstOrNull { it.id == "$CHAMET:id/tvResultNum" }?.let { vals["total"] = it.text }
         val got = interpret(vals)
+        if (pro) Log.d(TAG, "pro card $vals → ${got?.first} primed=$primed")
         if (got == null) {
             // result cleared off screen → the next result counts even if it's the same number
             if (vals["round"] == null) lastSig = ""
