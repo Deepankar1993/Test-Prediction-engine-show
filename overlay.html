@@ -74,6 +74,11 @@
   .rLast{font-size:10.5px;margin-top:3px;color:var(--mut)}
   .rLast .hit{color:var(--hit);font-weight:700} .rLast .miss{color:var(--miss);font-weight:700}
 
+  /* icon-only layout switch: number game / car race */
+  .vsw{flex:0 0 62px;margin:0;border-color:var(--line)}
+  .vsw div{padding:2px 0;font-size:16px;line-height:1.15;filter:grayscale(1);opacity:.5}
+  .vsw div.on{background:rgba(var(--eng),.22);filter:none;opacity:1}
+
   /* entry */
   .entry{margin-top:6px}
   .reelLine{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--mut);margin-bottom:4px}
@@ -149,6 +154,7 @@
       <div class="pad" id="pad"></div>
     </div>
     <div class="tools">
+      <div class="seg vsw" id="vsw"><div id="vNum" class="on" title="number game">🔢</div><div id="vRace" title="car race">🏁</div></div>
       <div class="mini" id="aiBtn">✦ AI</div>
       <div class="mini" id="sync">⇅ sync</div>
       <div class="mini" id="undo">↶ undo</div>
@@ -521,7 +527,15 @@ if(RD){
    per car; that forecast is what gets scored when the banner appears (never re-scored afterwards). */
 const RC=window.SYLOX_RACE; let rcS=null, rcPending=null, rcLast=null, rcSeen=0;
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));   // screen text is untrusted
-function rcMode(on){ $('ov').classList.toggle('racing',!!on); requestAnimationFrame(reportHeight); }
+function rcMode(on){ $('ov').classList.toggle('racing',!!on);
+  $('vNum').classList.toggle('on',!on); $('vRace').classList.toggle('on',!!on);
+  try{ localStorage.setItem('sylox_view',on?'race':'num'); }catch(e){}
+  if(on){ rcS=rcS||RC.load(); rcRender(); }
+  requestAnimationFrame(reportHeight); }
+// tap an icon to switch layout; the reader still flips it to whichever game shows up on screen
+$('vNum').onclick=()=>{ rcSeen=0; rcMode(false); };
+$('vRace').onclick=()=>{ if(RC) rcMode(true); };
+try{ if(RC&&localStorage.getItem('sylox_view')==='race') rcMode(true); }catch(e){}   // reopen where you left off
 function rcRender(){ if(!RC) return; const f=rcPending, st=RC.stats(rcS);
   $('rRoad').innerHTML = f ? (f.road?`<b>${esc(f.road)}</b> on road ${f.ri+1}/3 · other 2 hidden`:'road hidden') : 'waiting for the next race';
   $('rCd').textContent = f && f.cd>=0 ? f.cd+'s' : '';
