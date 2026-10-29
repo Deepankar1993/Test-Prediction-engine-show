@@ -73,17 +73,14 @@
   .rStat b{color:var(--ink)}
   .rLast{font-size:10.5px;margin-top:3px;color:var(--mut)}
   .rLast .hit{color:var(--hit);font-weight:700} .rLast .miss{color:var(--miss);font-weight:700}
-  /* recent races: one line each, newest first — ✓/✗ · who won · what the engine picked · shown road */
-  .rHist{margin-top:5px;border-top:1px solid var(--line);padding-top:4px}
-  .rHist .hd{display:grid;grid-template-columns:16px 1fr 1fr 74px;gap:4px;font-size:8.5px;color:var(--faint);
-    text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
-  .rHist .ln{display:grid;grid-template-columns:16px 1fr 1fr 74px;gap:4px;align-items:center;font-size:10.5px;
-    padding:2px 0;border-radius:4px}
-  .rHist .ln>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .rHist .ln .ic{text-align:center;font-weight:800}
-  .rHist .ln.h .ic,.rHist .ln.h .w{color:var(--hit)} .rHist .ln.m .ic{color:var(--miss)}
-  .rHist .ln .w{font-weight:700;color:var(--ink)} .rHist .ln .p{color:var(--mut)} .rHist .ln .rd{color:var(--faint);text-align:right}
-  .rHist .hd+.ln{background:rgba(255,255,255,.05)}   /* the newest race */
+  /* recent races: compact 2-column grid, newest first (top-left). "✓ SUV" = engine picked the winner;
+     "✗ Car · eng ORV" = Car won, engine had picked ORV. Long-press a cell for the shown road. */
+  .rHist{margin-top:4px;display:grid;grid-template-columns:1fr 1fr;gap:2px 4px}
+  .rHist .hd{grid-column:1/-1;font-size:8.5px;color:var(--faint)}
+  .rHist .c{font-size:10px;padding:1px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rHist .c.h{color:var(--hit);background:rgba(61,220,151,.12)}
+  .rHist .c.m{color:var(--ink);background:rgba(255,122,112,.09)} .rHist .c.m i{color:var(--miss);font-style:normal}
+  .rHist .c small{color:var(--faint);font-size:9px}
 
   /* icon-only layout switch: number game / car race */
   .vsw{flex:0 0 62px;margin:0;border-color:var(--line)}
@@ -558,17 +555,16 @@ function rcRender(){ if(!RC) return; const f=rcPending, st=RC.stats(rcS);
   if(f) $('rCars').querySelectorAll('.nm').forEach((el,i)=>{ el.textContent=f.cars[i]; });
   const pc=x=>st.n?Math.round(100*x/st.n)+'%':'—';
   $('rStat').innerHTML = st.n
-    ? `Engine <b>${pc(st.eng)}</b> (${st.eng}/${st.n}, CI ${Math.round(st.ci[0]*100)}–${Math.round(st.ci[1]*100)}%) · favourite ${pc(st.fav)} · crowd ${pc(st.crowd)} · least-money ${pc(st.contra)} · random 33%`
-      + (st.roi!=null?` · flat-bet ROI <b style="color:${st.roi>0?'var(--hit)':'var(--miss)'}">${st.roi>0?'+':''}${Math.round(st.roi*100)}%</b>`:'')
-      + (st.ready?'':` <span style="color:var(--faint)">· collecting ${st.n}/${RC.MIN_N} — % and EV are the model's guess, unproven</span>`)
-    : `Logging races… % and EV are the model's guess, unproven until ${RC.MIN_N} races are scored.`;
-  $('rLast').innerHTML = '';   // the newest race is the first line of the list below
-  // recent scored races, newest FIRST: ✓ = engine picked the winner, ✗ = it didn't
+    ? `Engine <b>${pc(st.eng)}</b> <span style="color:var(--faint)">${st.eng}/${st.n}</span> · fav ${pc(st.fav)} · crowd ${pc(st.crowd)} · least ${pc(st.contra)} · rnd 33%`
+      + (st.roi!=null?` · ROI <b style="color:${st.roi>0?'var(--hit)':'var(--miss)'}">${st.roi>0?'+':''}${Math.round(st.roi*100)}%</b>`:'')
+      + (st.ready?'':` <span style="color:var(--faint)">· ${st.n}/${RC.MIN_N} unproven</span>`)
+    : `Logging races… % and EV are the model's guess, unproven until ${RC.MIN_N} races.`;
+  $('rLast').innerHTML = '';
   const recent=rcS.races.filter(r=>r.winner).slice(-6).reverse();
-  $('rHist').innerHTML = recent.length ? `<div class="hd"><span></span><span>Won</span><span>Engine picked</span><span style="text-align:right">Shown road</span></div>`
-    + recent.map(r=>{ const hit=r.pick===r.winner;
-      return `<div class="ln ${hit?'h':'m'}"><span class="ic">${hit?'✓':'✗'}</span><span class="w">${esc(r.winner)}</span>`
-        + `<span class="p">${esc(r.pick)}</span><span class="rd">${r.road?esc(r.road)+' '+(r.ri+1)+'/3':'—'}</span></div>`; }).join('') : '';
+  $('rHist').innerHTML = recent.length ? `<div class="hd">recent · newest first · ✓ engine right</div>`
+    + recent.map(r=>{ const hit=r.pick===r.winner, tip=`${esc(r.winner)} won · engine picked ${esc(r.pick)}${r.road?' · shown road '+esc(r.road)+' '+(r.ri+1)+'/3':''}`;
+      return hit ? `<span class="c h" title="${tip}">✓ ${esc(r.winner)}</span>`
+                 : `<span class="c m" title="${tip}"><i>✗</i> ${esc(r.winner)} <small>· eng ${esc(r.pick)}</small></span>`; }).join('') : '';
   requestAnimationFrame(reportHeight);
 }
 window.__sxRace=function(m){ if(!RC||!m) return; rcS=rcS||RC.load(); rcSeen=Date.now(); rcMode(true);
