@@ -82,6 +82,11 @@
   .rHist .c.m{color:var(--ink);background:rgba(255,122,112,.09)} .rHist .c.m i{color:var(--miss);font-style:normal}
   .rHist .c small{color:var(--faint);font-size:9px}
 
+  /* auto-read on → results enter themselves, so the number pad folds away; ⌨ brings it back */
+  .autoread .entry{display:none}
+  .autoread.padOpen .entry{display:block}
+  .padOpen #padBtn{background:rgba(var(--eng),.2);color:var(--ink)}
+
   /* icon-only layout switch: number game / car race */
   .vsw{flex:0 0 62px;margin:0;border-color:var(--line)}
   .vsw div{padding:2px 0;font-size:16px;line-height:1.15;filter:grayscale(1);opacity:.5}
@@ -157,6 +162,7 @@
     <div class="row eng" id="aiRow" style="display:none"><span class="lab">AI</span><div class="strip ai"><span id="ai"></span></div><span class="pct" id="aiPct" title="how often the AI's 7 held the result (vs the central baseline on the same rounds)"></span></div>
     <div class="sub"><span class="new">New <b id="new"></b> <span id="newPct"></span></span></div>
     <div class="res"><span class="status" id="status">Tap the result when it lands.</span><span class="rdH" id="rdH" style="display:none"></span><span class="recent" id="recent"></span>
+      <button class="fold" id="padBtn" title="show / hide the number pad" style="display:none">⌨</button>
       <button class="fold" id="fold" title="collapse / expand">▾</button></div>
     <div class="entry">
       <div class="reelLine" id="reelLine" style="display:none"><span id="entryLab">reel digits</span><span class="reelPicks" id="reelPicks"></span></div>
@@ -472,7 +478,13 @@ function rdRuns(rs){
   return {digits, run, best, missed, med};
 }
 // HUD dot: is auto-read actually delivering? green = read recently, amber = game closed / waiting, red = stalled
-function rdHealth(){ const el=$('rdH'); if(!el||!P) return;
+// pad folds away while auto-read is entering results; ⌨ toggles it back on demand
+function padMode(){ let on=false; try{ on=RD&&!!NAT.readerOn()&&rdCfg.auto; }catch(e){}
+  const was=$('ov').classList.contains('autoread');
+  $('ov').classList.toggle('autoread',on); $('padBtn').style.display=on?'':'none';
+  if(was!==on) requestAnimationFrame(reportHeight); }
+$('padBtn').onclick=()=>{ $('ov').classList.toggle('padOpen'); requestAnimationFrame(reportHeight); };
+function rdHealth(){ padMode(); const el=$('rdH'); if(!el||!P) return;
   let on=false; try{ on=!!NAT.readerOn(); }catch(e){}
   if(!on||!rdCfg.auto){ el.style.display='none'; return; }
   const ago=rdLastAt?Math.round((Date.now()-rdLastAt)/1000):-1, med=rdRuns(P.rounds).med/1000;
