@@ -298,14 +298,28 @@ class ScreenReader : AccessibilityService() {
      */
     // The winner banner's view differs with your own bet: next_view (no bet), lose_next_view
     // ("YOU LOSE · Car won, Next 10 s", seen with a 4-diamond test bet), presumably win_next_view —
-    // so accept any of the game's own views ending in next_view. (Not free text: the live-room chat
-    // sits on the same screen and anyone could type "ORV won, Next 5 s".)
-    private val WON = Regex("^(.+?) won, Next")
-    private fun banner(nodes: List<TextNode>) =
-        nodes.firstOrNull { it.id.startsWith("$CHAMET:id/") && it.id.endsWith("next_view") && WON.containsMatchIn(it.text) }
+    // so only those known game views count. (Not free text: the live-room chat sits on the same
+    // screen and anyone could type "ORV won, Next 5 s".) An unknown game view saying "won, Next" is
+    // logged so a differently named banner gets noticed instead of silently missed.
+    private val BANNERS = setOf("next_view", "lose_next_view", "win_next_view").map { "$CHAMET:id/$it" }.toSet()
+    private var lineup = listOf<String>()   // the 3 cars of the race being run (from the betting panel)
+    private fun banner(nodes: List<TextNode>): TextNode? {
+        val b = nodes.firstOrNull { it.id in BANNERS && it.text.contains(" won, Next") }
+        if (b == null) nodes.firstOrNull { it.id.startsWith("$CHAMET:id/") && it.text.contains(" won, Next") }
+            ?.let { Log.w(TAG, "unknown result banner view ${it.id}") }
+        return b
+    }
+    // the winner is whichever car of THIS race the banner names (longest first: "Sports Car" ≠ "Car")
+    private fun winnerOf(text: String) =
+        lineup.sortedByDescending { it.length }.firstOrNull { text.contains("$it won, Next") }
 
     private fun raceCheck(nodes: List<TextNode>): Boolean {
-        val won = banner(nodes)?.text?.let { WON.find(it)?.groupValues?.get(1) }
+        val bn = banner(nodes)
+        val won = bn?.let { winnerOf(it.text) }
+        if (bn != null && won == null && raceWon != bn.text.substringBefore(", Next")) {
+            raceWon = bn.text.substringBefore(", Next"); Log.w(TAG, "result banner not matched to the lineup $lineup: ${bn.text.take(60)}")
+            return true
+        }
         if (won != null) {
             if (won != raceWon) {
                 raceWon = won
@@ -320,6 +334,7 @@ class ScreenReader : AccessibilityService() {
         val cars = byId(nodes, "tv_car_name")
         if (cars.size != 3) { if (raceWon.isNotEmpty() && banner(nodes) == null) raceWon = ""; return false }
         raceWon = ""
+        lineup = cars.map { it.text }
         val dm = resources.displayMetrics
         val sign = byId(nodes, "tv_track_sign").firstOrNull()
         val idx = sign?.let { (it.r.exactCenterX() / dm.widthPixels * 3).toInt().coerceIn(0, 2) } ?: -1
