@@ -31,6 +31,7 @@ class ScreenReader : AccessibilityService() {
         const val PREFS = "sylox_reader"
         const val KEY_CFG = "cfg"          // {pkg, auto, items:[{role,id,cx,cy}]}
         const val SETTLE_MS = 900L         // value must hold this long (skips rolling-reel animation)
+        const val PRO_SETTLE_MS = 120L     // Lucky28-Pro's card is up < 1 s and never rolls
         const val TICK_MS = 4000L          // watchdog look (the result card stays up ~10s)
         const val STALE_MS = 200_000L      // ~3 rounds with the game open and nothing read → buzz
         const val TAG = "SyloxReader"
@@ -254,6 +255,10 @@ class ScreenReader : AccessibilityService() {
         for (it in items) locate(it, nodes)?.let { n -> vals[it.optString("role")] = n.text }
         if (preset && vals["result"] == null) cardFallback(nodes)?.let { (card, tot) ->
             vals["result"] = card; vals["total"] = tot }
+        // Lucky28-Pro (manual GO spins) shows the same resultText card but its total is tvResultNum
+        // and it's up for < 1 s (adb dump, Oct 2026) — so it's read without the long settle wait.
+        val pro = preset && nodes.any { it.id == "$CHAMET:id/tvResultNum" }
+        if (pro && vals["total"] == null) nodes.firstOrNull { it.id == "$CHAMET:id/tvResultNum" }?.let { vals["total"] = it.text }
         val got = interpret(vals)
         if (got == null) {
             // result cleared off screen → the next result counts even if it's the same number
@@ -267,17 +272,18 @@ class ScreenReader : AccessibilityService() {
         if (sig == lastSig) return
         val now = System.currentTimeMillis()
         if (sig != pendSig) { pendSig = sig; pendAt = now }
-        if (now - pendAt < SETTLE_MS) {
+        val settle = if (pro) PRO_SETTLE_MS else SETTLE_MS   // Pro's reels have already stopped
+        if (now - pendAt < settle) {
             h.removeCallbacks(checkRun)
-            h.postDelayed(checkRun, SETTLE_MS - (now - pendAt) + 50)   // re-check once settled
+            h.postDelayed(checkRun, settle - (now - pendAt) + 30)   // re-check once settled
             return
         }
         lastSig = sig; pendSig = ""
         val (sum, reels) = got
         lastRead = if (reels != null) "${reels.joinToString("+")}=$sum" else "$sum"
-        Log.i(TAG, "read $lastRead" + (if (lastAt > 0) " (+${(now - lastAt) / 1000}s)" else ""))
+        Log.i(TAG, "read ${if (pro) "pro " else ""}$lastRead" + (if (lastAt > 0) " (+${(now - lastAt) / 1000}s)" else ""))
         lastAt = now; alerted = false
-        OverlayService.live?.pushAuto(sum, reels)
+        OverlayService.live?.pushAuto(sum, reels, if (pro) "pro" else "timed")
     }
 
     // ---------------------------------------------------------------- Chamet car race

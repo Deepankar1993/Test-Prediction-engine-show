@@ -92,7 +92,7 @@
   .padOpen #padBtn{background:rgba(var(--eng),.2);color:var(--ink)}
 
   /* icon-only layout switch: number game / car race */
-  .vsw{flex:0 0 62px;margin:0;border-color:var(--line)}
+  .vsw{flex:0 0 90px;margin:0;border-color:var(--line)}
   .vsw div{padding:2px 0;font-size:16px;line-height:1.15;filter:grayscale(1);opacity:.5}
   .vsw div.on{background:rgba(var(--eng),.22);filter:none;opacity:1}
 
@@ -174,7 +174,7 @@
       <div class="pad" id="pad"></div>
     </div>
     <div class="tools">
-      <div class="seg vsw" id="vsw"><div id="vNum" class="on" title="number game">🔢</div><div id="vRace" title="car race">🏁</div></div>
+      <div class="seg vsw" id="vsw"><div id="vNum" class="on" title="number game (timed)">🔢</div><div id="vPro" title="Lucky28-Pro">🎰</div><div id="vRace" title="car race">🏁</div></div>
       <div class="mini" id="aiBtn">✦ AI</div>
       <div class="mini" id="sync">⇅ sync</div>
       <div class="mini" id="undo">↶ undo</div>
@@ -226,7 +226,10 @@
 /* compact floating predictor — shares the sylox_livetest_v2 test with the full tool.
    All prediction/scoring/replay/merge logic is the shared SYLOX_CORE (appcore.js), so the web tool
    shows exactly the same BET 7 / ENG 7 / NEW 4 numbers for the same rounds. */
-const LS='sylox_livetest_v2';
+// two number games share this HUD but never one log: the timed 1/min game (synced across devices)
+// and Lucky28-Pro (manual GO spins, local only). PT keeps the timed state while Pro is on screen.
+const LS_TIMED='sylox_livetest_v2', LS_PRO='sylox_pro_v1';
+let GAME='timed', LS=LS_TIMED, PT=null;
 const {K_OLD,K_NEW,BASE7:BASE8set,fresh,normalize,needsRebuild,trustK,paramsAt,aiTrust,predictRound,applyRound,
   rebuildFrom,newRoundId,rk,unionDel,mergeLog,mergeRemote}=SYLOX_CORE;
 const $=id=>document.getElementById(id);
@@ -234,7 +237,8 @@ let P=null, cur=null;
 
 function load(){ try{ const s=normalize(JSON.parse(localStorage.getItem(LS))); if(s) return s; }catch(e){} return fresh(); }
 function save(){ try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){}
-  try{ if(window.SYLOX_SYNC&&SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }
+  try{ if(GAME==='timed'&&window.SYLOX_SYNC&&SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }
+const timedState=()=>GAME==='timed'?P:PT;   // what sync reads, whichever game is on screen
 
 function chips(arr,el){ $(el).innerHTML=arr.slice().sort((a,b)=>a-b).map(n=>`<span class="c">${Number(n)|0}</span>`).join(''); }
 // a strip cell per pick, shaded by its model probability (2%..10% -> faint..solid); exact % on long-press title
@@ -277,6 +281,7 @@ function render(){
     ? (L.oldHit?`<span class="hit">✓ ${L.actual}</span> in Bet`:`<span class="miss">✗ ${L.actual}</span> missed`)
       + ` · Eng ${L.engHit?'✓':'✗'}` + (L.aiHit==null?'':` · AI ${L.aiHit?'✓':'✗'}`)
     : (P.oR?'Tap the result when it lands.':'Tap the first result to start.');
+  if(GAME==='pro') $('status').innerHTML='<b style="color:rgb(var(--ai))">Pro</b> · '+$('status').innerHTML;
   // newest first · green = ENG held it (alone or with BET) · gold = only BET held it · plain = full miss
   const rec=P.rounds.slice(-8).reverse();
   $('recent').innerHTML=rec.map((e,i)=>{ const r=Array.isArray(e.r)&&e.r.length===3?e.r.map(d=>Number(d)|0):null;
@@ -344,8 +349,9 @@ $('impFile').onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new 
 // Returns true if local data changed; pushes back whenever the remote lacks something we have.
 function applyRemote(s){
   if(!s || s.v!==2 || !Array.isArray(s.rounds)) return false;
-  const m=mergeRemote(P,s);
-  if(m.localChanged){ P=m.state; try{localStorage.setItem(LS,JSON.stringify(P));}catch(e){} lockRound(); }
+  const m=mergeRemote(timedState(),s);   // sync is the timed game only — never merged into Pro
+  if(m.localChanged){ try{localStorage.setItem(LS_TIMED,JSON.stringify(m.state));}catch(e){}
+    if(GAME==='timed'){ P=m.state; lockRound(); } else PT=m.state; }
   if(m.remoteStale){ try{ if(SYLOX_SYNC.active()) SYLOX_SYNC.pushSoon(); }catch(e){} }  // push the superset back
   return m.localChanged;
 }
@@ -362,9 +368,9 @@ $('sync').onclick=()=>{ const r=$('syncRow'); const show=r.style.display==='none
     nativeIme(true); setTimeout(()=>{ try{$('syncCode').focus();}catch(e){} },60); }
   else nativeIme(false); };
 $('syncGo').onclick=()=>{ if(SYLOX_SYNC.active()){ SYLOX_SYNC.disable(); syncStatus('off'); $('syncRow').style.display='none'; nativeIme(false); return; }
-  const c=$('syncCode').value.trim(); if(!c)return; SYLOX_SYNC.enable(c,()=>P,applyRemote,syncStatus); $('syncRow').style.display='none'; nativeIme(false); };
+  const c=$('syncCode').value.trim(); if(!c)return; SYLOX_SYNC.enable(c,timedState,applyRemote,syncStatus); $('syncRow').style.display='none'; nativeIme(false); };
 $('syncCode').addEventListener('keydown',e=>{ if(e.key==='Enter') $('syncGo').click(); });
-if(SYLOX_SYNC.savedCode()) SYLOX_SYNC.enable(SYLOX_SYNC.savedCode(),()=>P,applyRemote,syncStatus);
+if(SYLOX_SYNC.savedCode()) SYLOX_SYNC.enable(SYLOX_SYNC.savedCode(),timedState,applyRemote,syncStatus);
 
 // ---- AI analyst for ENG (ai.js): off / on demand / live ----
 // on demand: buttons only. live: the AI picks every round automatically and re-tunes ENG every N rounds.
@@ -554,15 +560,17 @@ if(RD){
    per car; that forecast is what gets scored when the banner appears (never re-scored afterwards). */
 const RC=window.SYLOX_RACE; let rcS=null, rcPending=null, rcLast=null, rcSeen=0;
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));   // screen text is untrusted
-function rcMode(on){ $('ov').classList.toggle('racing',!!on);
-  $('vNum').classList.toggle('on',!on); $('vRace').classList.toggle('on',!!on);
-  try{ localStorage.setItem('sylox_view',on?'race':'num'); }catch(e){}
+function vswMark(){ const r=$('ov').classList.contains('racing');
+  $('vNum').classList.toggle('on',!r&&GAME==='timed'); $('vPro').classList.toggle('on',!r&&GAME==='pro'); $('vRace').classList.toggle('on',r); }
+function rcMode(on){ $('ov').classList.toggle('racing',!!on); vswMark();
+  try{ localStorage.setItem('sylox_view',on?'race':(GAME==='pro'?'pro':'num')); }catch(e){}
   if(on){ rcS=rcS||RC.load(); rcRender(); }
   requestAnimationFrame(reportHeight); }
 // tap an icon to switch layout; the reader still flips it to whichever game shows up on screen
-$('vNum').onclick=()=>{ rcSeen=0; rcMode(false); };
+$('vNum').onclick=()=>{ rcSeen=0; switchGame('timed'); rcMode(false); };
+$('vPro').onclick=()=>{ rcSeen=0; switchGame('pro'); rcMode(false); };
 $('vRace').onclick=()=>{ if(RC) rcMode(true); };
-try{ if(RC&&localStorage.getItem('sylox_view')==='race') rcMode(true); }catch(e){}   // reopen where you left off
+try{ const v=localStorage.getItem('sylox_view'); if(RC&&v==='race') rcMode(true); }catch(e){}   // reopen where you left off
 function rcRender(){ if(!RC) return; const f=rcPending, st=RC.stats(rcS);
   $('rRoad').innerHTML = f ? (f.road?`<b>${esc(f.road)}</b> on road ${f.ri+1}/3 · other 2 hidden`:'road hidden') : 'waiting for the next race';
   $('rCd').textContent = f && f.cd>=0 ? f.cd+'s' : '';
@@ -593,7 +601,7 @@ window.__sxRace=function(m){ if(!RC||!m) return; rcS=rcS||RC.load(); rcSeen=Date
 setInterval(()=>{ if(rcSeen&&Date.now()-rcSeen>120e3){ rcSeen=0; rcMode(false); } }, 10e3);
 
 // the reader saw a new settled result on the game screen
-window.__sxAuto=function(sum,reels){ rcSeen=0; rcMode(false);
+window.__sxAuto=function(sum,reels,src){ rcSeen=0; switchGame(src==='pro'?'pro':'timed'); rcMode(false);
   if(!(sum>=0&&sum<=27)) return;
   reelPick=[]; resolve(sum, Array.isArray(reels)&&reels.length===3?reels:null); renderReelPicks();
   const e=P.rounds[P.rounds.length-1]; if(e){ e.a=1; save(); }   // came from auto-read (feeds gap detection)
@@ -605,7 +613,18 @@ function reportHeight(){ try{ if(window.SyloxNative&&SyloxNative.resize){
   SyloxNative.resize(Math.ceil(document.getElementById('ov').getBoundingClientRect().height)); } }catch(e){} }
 const _render=render; render=function(){ _render(); requestAnimationFrame(reportHeight); };
 
-try{ P=load();
+// swap the HUD between the timed game's log and Lucky28-Pro's (each keeps its own engine state)
+function switchGame(g){ if(g!==GAME&&(g==='timed'||g==='pro')){ save();
+    if(GAME==='timed') PT=P;
+    GAME=g; LS=g==='pro'?LS_PRO:LS_TIMED;
+    P = g==='timed'&&PT ? PT : load();
+    if(needsRebuild(P)){ const keep={del:P.del, mode:P.mode, lastExport:P.lastExport};
+      P=rebuildFrom(P.rounds,P.seed,P.created,P.engLog); Object.assign(P,keep); P.del=P.del||[]; save(); }
+    try{ localStorage.setItem('sylox_game',g); }catch(e){}
+    P._last=null; buildPad(); lockRound(); }
+  vswMark(); }
+try{ try{ if(localStorage.getItem('sylox_game')==='pro'){ GAME='pro'; LS=LS_PRO; PT=normalize(JSON.parse(localStorage.getItem(LS_TIMED)))||fresh(); } }catch(e){}
+  P=load();
   // self-clean + backfill: drop seed rounds, and (re)compute the trust meter from history if it's missing
   // replay once when stored stats are stale (engine upgrade, retired seed rounds, old web format)
   if(needsRebuild(P)){
@@ -613,7 +632,7 @@ try{ P=load();
     P=rebuildFrom(P.rounds,P.seed,P.created,P.engLog); Object.assign(P,keep); P.del=P.del||[]; save(); }
   // a test shared TO the Android app (via the share sheet) arrives here on open
   try{ if(window.SyloxNative&&SyloxNative.pendingImport){ const pend=SyloxNative.pendingImport(); if(pend) window.__sxImport(pend); } }catch(e){}
-  buildPad(); lockRound(); try{ if(localStorage.getItem('sylox_fold')) setFold(true); }catch(e){} reportHeight(); }
+  buildPad(); lockRound(); vswMark(); try{ if(localStorage.getItem('sylox_fold')) setFold(true); }catch(e){} reportHeight(); }
 catch(e){ document.body.innerHTML='<div class="err">overlay error: '+e.message+'</div>'; }
 </script>
 </body>

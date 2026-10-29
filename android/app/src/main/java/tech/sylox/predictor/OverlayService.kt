@@ -209,11 +209,12 @@ class OverlayService : Service() {
     }
 
     /** Auto-read (ScreenReader) saw a new result on the game screen: enter it like a tap would. */
-    fun pushAuto(sum: Int, reels: IntArray?) {
+    fun pushAuto(sum: Int, reels: IntArray?, src: String = "timed") {
         val w = web ?: return
         val r = reels?.joinToString(",", "[", "]") ?: "null"
+        val s = if (src == "pro") "pro" else "timed"   // fixed literal — never screen text
         Handler(mainLooper).post {
-            w.evaluateJavascript("window.__sxAuto&&window.__sxAuto($sum,$r)", null)
+            w.evaluateJavascript("window.__sxAuto&&window.__sxAuto($sum,$r,'$s')", null)
         }
     }
 
