@@ -199,6 +199,12 @@ class OverlayService : Service() {
         }
     }
 
+    /** Car race state/result from the reader → the overlay's race engine (JSON object literal). */
+    fun pushRace(json: String) {
+        val w = web ?: return
+        Handler(mainLooper).post { w.evaluateJavascript("window.__sxRace&&window.__sxRace($json)", null) }
+    }
+
     /** Auto-read (ScreenReader) saw a new result on the game screen: enter it like a tap would. */
     fun pushAuto(sum: Int, reels: IntArray?) {
         val w = web ?: return

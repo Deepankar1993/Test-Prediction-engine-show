@@ -248,9 +248,10 @@ class ScreenReader : AccessibilityService() {
         val (pkg, nodes) = read()
         gameUp = pkg == gamePkg(c)
         if (!gameUp) return
+        val preset = (c.optJSONArray("items")?.length() ?: 0) == 0
+        if (preset && gamePkg(c) == CHAMET && raceCheck(nodes)) return   // the car race is on screen
         val vals = HashMap<String, String>()
         for (it in items) locate(it, nodes)?.let { n -> vals[it.optString("role")] = n.text }
-        val preset = (c.optJSONArray("items")?.length() ?: 0) == 0
         if (preset && vals["result"] == null) cardFallback(nodes)?.let { (card, tot) ->
             vals["result"] = card; vals["total"] = tot }
         val got = interpret(vals)
@@ -277,5 +278,53 @@ class ScreenReader : AccessibilityService() {
         Log.i(TAG, "read $lastRead" + (if (lastAt > 0) " (+${(now - lastAt) / 1000}s)" else ""))
         lastAt = now; alerted = false
         OverlayService.live?.pushAuto(sum, reels)
+    }
+
+    // ---------------------------------------------------------------- Chamet car race
+
+    private var raceSig = ""        // last betting state handed over (cars|road|odds|countdown)
+    private var raceWon = ""        // winner banner already handed over for this result screen
+
+    private fun byId(nodes: List<TextNode>, id: String) =
+        nodes.filter { it.id == "$CHAMET:id/$id" }.sortedBy { it.r.left }
+
+    /**
+     * The race panel (adb dump, Oct 2026): before the race, 3 cards — tv_car_name, tv_car_odds
+     * ("4.7/3.5" = live crowd odds / fixed odds; "- /2.4" before any bets), tv_totalBet — plus ONE
+     * revealed road tv_track_sign ("Desert") over one of the 3 track segments (the other two "???"),
+     * countdown tv_race_surplus. After the race: next_view "Car won, Next 7 s" + bet_diamond pools.
+     * The 2 hidden roads only appear as drawn textures during the race. Returns true while the race
+     * panel is up (so the number-game logic stays out of it).
+     */
+    private fun raceCheck(nodes: List<TextNode>): Boolean {
+        val won = byId(nodes, "next_view").firstOrNull()?.text?.let { Regex("^(.+?) won").find(it)?.groupValues?.get(1) }
+        if (won != null) {
+            if (won != raceWon) {
+                raceWon = won
+                val pools = JSONArray(); byId(nodes, "bet_diamond").forEach { pools.put(it.text) }
+                val now = System.currentTimeMillis()
+                Log.i(TAG, "race won by $won")
+                lastAt = now; alerted = false; lastRead = "race: $won"
+                OverlayService.live?.pushRace(JSONObject().put("type", "result").put("winner", won).put("pools", pools).toString())
+            }
+            return true
+        }
+        val cars = byId(nodes, "tv_car_name")
+        if (cars.size != 3) { if (raceWon.isNotEmpty() && nodes.none { it.id.endsWith("/next_view") }) raceWon = ""; return false }
+        raceWon = ""
+        val dm = resources.displayMetrics
+        val sign = byId(nodes, "tv_track_sign").firstOrNull()
+        val idx = sign?.let { (it.r.exactCenterX() / dm.widthPixels * 3).toInt().coerceIn(0, 2) } ?: -1
+        val odds = byId(nodes, "tv_car_odds").map { it.text }
+        val pools = byId(nodes, "tv_totalBet").map { it.text }
+        val t = byId(nodes, "tv_race_surplus").firstOrNull()?.let { ints(it.text).firstOrNull() } ?: -1
+        val sig = cars.joinToString(",") { it.text } + "|" + (sign?.text ?: "") + idx + "|" + odds + "|" + t
+        if (sig != raceSig) {
+            raceSig = sig
+            val o = JSONObject().put("type", "bet").put("road", sign?.text ?: "").put("roadIdx", idx).put("t", t)
+                .put("cars", JSONArray(cars.map { it.text })).put("odds", JSONArray(odds)).put("pools", JSONArray(pools))
+            OverlayService.live?.pushRace(o.toString())
+        }
+        return true
     }
 }

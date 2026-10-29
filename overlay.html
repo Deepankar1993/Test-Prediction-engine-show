@@ -55,6 +55,25 @@
   .fold{background:none;border:0;color:var(--mut);font-size:13px;width:22px;height:22px;border-radius:6px}
   .fold:active{background:rgba(255,255,255,.08)}
 
+  /* car race card (shown instead of the number HUD while Chamet Race is on screen) */
+  .race{display:none}
+  .racing .race{display:block}
+  .racing .row,.racing .sub,.racing .res,.racing .entry{display:none!important}
+  .rHead{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--mut);margin-bottom:5px}
+  .rHead b{color:var(--ink)} .rHead .cd{margin-left:auto;font-weight:700;color:rgb(var(--bet))}
+  .rCars{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+  .rCar{border-radius:8px;padding:5px 4px 4px;text-align:center;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+  .rCar .nm{font-size:10.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rCar .pw{font-size:18px;font-weight:800;line-height:1.15}
+  .rCar .od{font-size:9.5px;color:var(--faint)}
+  .rCar.pick{background:rgba(var(--bet),.16);border-color:rgba(var(--bet),.6)}
+  .rCar.pick .pw{color:rgb(var(--bet))}
+  .rCar .ev{font-size:9px;font-weight:700} .rCar .ev.pos{color:var(--hit)} .rCar .ev.neg{color:var(--faint)}
+  .rStat{font-size:10px;color:var(--mut);margin-top:5px;line-height:1.35}
+  .rStat b{color:var(--ink)}
+  .rLast{font-size:10.5px;margin-top:3px;color:var(--mut)}
+  .rLast .hit{color:var(--hit);font-weight:700} .rLast .miss{color:var(--miss);font-weight:700}
+
   /* entry */
   .entry{margin-top:6px}
   .reelLine{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--mut);margin-bottom:4px}
@@ -113,6 +132,12 @@
     <button class="x" id="x" title="close">×</button>
   </div>
   <div class="body">
+    <div class="race" id="race">
+      <div class="rHead"><span>Race</span><span id="rRoad"></span><span class="cd" id="rCd"></span></div>
+      <div class="rCars" id="rCars"></div>
+      <div class="rStat" id="rStat"></div>
+      <div class="rLast" id="rLast"></div>
+    </div>
     <div class="row bet"><span class="lab">Bet<i id="trust">safe</i></span><div class="strip bet" id="old"></div><span class="pct" id="oldPct" title="how often the result landed in BET 7"></span></div>
     <div class="row eng"><span class="lab">Eng</span><div class="strip eng" id="eng"></div><span class="pct" id="engPct" title="the engine's own picks — scored every round, only bet once they beat the baseline"></span></div>
     <div class="row eng" id="aiRow" style="display:none"><span class="lab">AI</span><div class="strip ai"><span id="ai"></span></div><span class="pct" id="aiPct" title="how often the AI's 7 held the result (vs the central baseline on the same rounds)"></span></div>
@@ -170,6 +195,7 @@
 <script src="appcore.js"></script>
 <script src="sync.js"></script>
 <script src="ai.js"></script>
+<script src="race.js"></script>
 <script>
 /* compact floating predictor — shares the sylox_livetest_v2 test with the full tool.
    All prediction/scoring/replay/merge logic is the shared SYLOX_CORE (appcore.js), so the web tool
@@ -490,8 +516,37 @@ if(RD){
   rdLoadCfg(); rdHealth();
   setInterval(()=>{ rdLoadCfg(); rdHealth(); if($('rdPanel').style.display!=='none') rdStatsLine(); }, 5000);
 }
+/* Chamet Race: the reader streams the betting state ({type:'bet', cars, road, roadIdx, odds, t}) and
+   the winner banner ({type:'result', winner}). race.js turns the latest pre-race state into P(win)
+   per car; that forecast is what gets scored when the banner appears (never re-scored afterwards). */
+const RC=window.SYLOX_RACE; let rcS=null, rcPending=null, rcLast=null, rcSeen=0;
+function rcMode(on){ $('ov').classList.toggle('racing',!!on); requestAnimationFrame(reportHeight); }
+function rcRender(){ if(!RC) return; const f=rcPending, st=RC.stats(rcS);
+  $('rRoad').innerHTML = f ? (f.road?`<b>${f.road}</b> on road ${f.ri+1}/3 · other 2 hidden`:'road hidden') : 'waiting for the next race';
+  $('rCd').textContent = f && f.cd>=0 ? f.cd+'s' : '';
+  $('rCars').innerHTML = f ? f.cars.map((n,i)=>{ const ev=f.ev[i];
+    return `<div class="rCar${n===f.pick?' pick':''}"><div class="nm"></div><div class="pw">${Math.round(f.p[i]*100)}%</div>`
+      + `<div class="od">${f.odds[i]!=null?'×'+f.odds[i]:'—'} · fixed ${f.fixed[i]||'?'}</div>`
+      + (ev!=null?`<div class="ev ${ev>0?'pos':'neg'}">EV ${ev>0?'+':''}${Math.round(ev*100)}%</div>`:'')+'</div>'; }).join('') : '';
+  if(f) $('rCars').querySelectorAll('.nm').forEach((el,i)=>{ el.textContent=f.cars[i]; });
+  const pc=x=>st.n?Math.round(100*x/st.n)+'%':'—';
+  $('rStat').innerHTML = st.n
+    ? `Engine <b>${pc(st.eng)}</b> (${st.eng}/${st.n}, CI ${Math.round(st.ci[0]*100)}–${Math.round(st.ci[1]*100)}%) · favourite ${pc(st.fav)} · crowd ${pc(st.crowd)} · random 33%`
+      + (st.roi!=null?` · flat-bet ROI <b style="color:${st.roi>0?'var(--hit)':'var(--miss)'}">${st.roi>0?'+':''}${Math.round(st.roi*100)}%</b>`:'')
+      + (st.ready?'':` <span style="color:var(--faint)">· collecting ${st.n}/${RC.MIN_N} — % and EV are the model's guess, unproven</span>`)
+    : `Logging races… % and EV are the model's guess, unproven until ${RC.MIN_N} races are scored.`;
+  $('rLast').innerHTML = rcLast ? `Last: <b>${rcLast.winner}</b> won · engine ${rcLast.pick===rcLast.winner?'<span class="hit">✓</span>':'<span class="miss">✗</span>'} (picked ${rcLast.pick})` : '';
+  requestAnimationFrame(reportHeight);
+}
+window.__sxRace=function(m){ if(!RC||!m) return; rcS=rcS||RC.load(); rcSeen=Date.now(); rcMode(true);
+  if(m.type==='bet' && m.cars && m.cars.length===3) rcPending=RC.forecast(rcS,m);   // latest pre-race reading wins
+  else if(m.type==='result'){ const r=RC.settle(rcS,rcPending,m.winner); if(r) rcLast=r; rcPending=null; }
+  rcRender(); };
+// back to the number HUD when the race panel has been gone a while
+setInterval(()=>{ if(rcSeen&&Date.now()-rcSeen>120e3){ rcSeen=0; rcMode(false); } }, 10e3);
+
 // the reader saw a new settled result on the game screen
-window.__sxAuto=function(sum,reels){
+window.__sxAuto=function(sum,reels){ rcSeen=0; rcMode(false);
   if(!(sum>=0&&sum<=27)) return;
   reelPick=[]; resolve(sum, Array.isArray(reels)&&reels.length===3?reels:null); renderReelPicks();
   const e=P.rounds[P.rounds.length-1]; if(e){ e.a=1; save(); }   // came from auto-read (feeds gap detection)
