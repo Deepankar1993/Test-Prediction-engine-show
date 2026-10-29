@@ -31,7 +31,9 @@ class ScreenReader : AccessibilityService() {
         const val PREFS = "sylox_reader"
         const val KEY_CFG = "cfg"          // {pkg, auto, items:[{role,id,cx,cy}]}
         const val SETTLE_MS = 900L         // value must hold this long (skips rolling-reel animation)
-        const val PRO_SETTLE_MS = 120L     // Lucky28-Pro's card is up < 1 s and never rolls
+        // Lucky28-Pro's card is up only ~0.3 s and never rolls: accept it on first sight (its digits
+        // must still add up to the shown total, which rules out a half-drawn frame)
+        const val PRO_SETTLE_MS = 0L
         const val TICK_MS = 4000L          // watchdog look (the result card stays up ~10s)
         const val STALE_MS = 200_000L      // ~3 rounds with the game open and nothing read → buzz
         const val TAG = "SyloxReader"
@@ -266,7 +268,6 @@ class ScreenReader : AccessibilityService() {
         val pro = preset && nodes.any { it.id == "$CHAMET:id/tvResultNum" }
         if (pro && vals["total"] == null) nodes.firstOrNull { it.id == "$CHAMET:id/tvResultNum" }?.let { vals["total"] = it.text }
         val got = interpret(vals)
-        if (pro) Log.d(TAG, "pro card $vals → ${got?.first} primed=$primed")
         if (got == null) {
             // result cleared off screen → the next result counts even if it's the same number
             if (vals["round"] == null) lastSig = ""
@@ -275,7 +276,9 @@ class ScreenReader : AccessibilityService() {
         }
         val sig = (vals["round"] ?: "") + "|" + got.first + "|" + (got.second?.joinToString(",") ?: "")
         // whatever is already on screen when auto starts is an old round — don't log it
-        if (!primed) { primed = true; lastSig = sig; return }
+        // (a Pro card can't be stale — it's gone within a second — so it's never skipped)
+        if (!primed && !pro) { primed = true; lastSig = sig; return }
+        primed = true
         if (sig == lastSig) return
         val now = System.currentTimeMillis()
         if (sig != pendSig) { pendSig = sig; pendAt = now }
