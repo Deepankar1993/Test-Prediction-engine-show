@@ -296,8 +296,16 @@ class ScreenReader : AccessibilityService() {
      * The 2 hidden roads only appear as drawn textures during the race. Returns true while the race
      * panel is up (so the number-game logic stays out of it).
      */
+    // The winner banner's view differs with your own bet: next_view (no bet), lose_next_view
+    // ("YOU LOSE · Car won, Next 10 s", seen with a 4-diamond test bet), presumably win_next_view —
+    // so accept any of the game's own views ending in next_view. (Not free text: the live-room chat
+    // sits on the same screen and anyone could type "ORV won, Next 5 s".)
+    private val WON = Regex("^(.+?) won, Next")
+    private fun banner(nodes: List<TextNode>) =
+        nodes.firstOrNull { it.id.startsWith("$CHAMET:id/") && it.id.endsWith("next_view") && WON.containsMatchIn(it.text) }
+
     private fun raceCheck(nodes: List<TextNode>): Boolean {
-        val won = byId(nodes, "next_view").firstOrNull()?.text?.let { Regex("^(.+?) won").find(it)?.groupValues?.get(1) }
+        val won = banner(nodes)?.text?.let { WON.find(it)?.groupValues?.get(1) }
         if (won != null) {
             if (won != raceWon) {
                 raceWon = won
@@ -310,7 +318,7 @@ class ScreenReader : AccessibilityService() {
             return true
         }
         val cars = byId(nodes, "tv_car_name")
-        if (cars.size != 3) { if (raceWon.isNotEmpty() && nodes.none { it.id.endsWith("/next_view") }) raceWon = ""; return false }
+        if (cars.size != 3) { if (raceWon.isNotEmpty() && banner(nodes) == null) raceWon = ""; return false }
         raceWon = ""
         val dm = resources.displayMetrics
         val sign = byId(nodes, "tv_track_sign").firstOrNull()
