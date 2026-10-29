@@ -271,7 +271,9 @@ function render(){
   $('oldPct').innerHTML=P.oR?`${o}%<small>${P.oH}/${P.oR}</small>`:'<small>—</small>'; $('oldPct').style.color=P.oR?tone(o,b):'';
   $('engPct').innerHTML=sN?`${e}%<small>${P.shH||0}/${sN}</small>`:'<small>—</small>'; $('engPct').style.color=sN?tone(e,b):'';
   const k=trustK(P), g=Math.round(engTrust(P.Wold)*100);
-  $('trust').textContent=k>0?`edge ${Math.round(k*100)}%`:'safe'; $('trust').title=k>0?'BET 7 is blending in the engine (it has beaten the baseline)':'BET 7 plays the central baseline until the engine proves an edge';
+  // BET stays on the central 7 until ENG has a 50-round shadow record (counted after a 12-round warm-up)
+  const toGo=Math.max(0,12-(P.Hold||[]).length)+Math.max(0,50-sN);
+  $('trust').textContent=k>0?`edge ${Math.round(k*100)}%`:(toGo?`safe·${toGo}`:'safe'); $('trust').title=k>0?'BET 7 is blending in the engine (it has beaten the baseline)':'BET 7 plays the central baseline until the engine proves an edge';
   $('trust').className=k>0?'gate on':'';
   $('engPct').title=`engine's own picks: ${P.shH||0}/${sN} hits; confidence gate ${g}% (0% = still on the central baseline)`;
   $('newPct').innerHTML=P.nR?`· lands ${Math.round(P.nH/P.nR*100)}% <span style="color:var(--faint)">(Sylox evades)</span>`:'';
