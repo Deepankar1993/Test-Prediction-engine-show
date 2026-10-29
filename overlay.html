@@ -46,19 +46,23 @@
   .res{display:flex;align-items:center;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);min-height:22px}
   .status{flex:1;font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .status .hit{color:var(--hit);font-weight:700} .status .miss{color:var(--miss);font-weight:700}
-  .recent{display:flex;gap:2px}
-  .recent .rv{min-width:19px;text-align:center;font-size:10.5px;padding:1px 3px;border-radius:4px;color:var(--faint);background:rgba(255,255,255,.04)}
-  .recent .rv.h{color:var(--hit);background:rgba(61,220,151,.12)}   /* ENG held it (alone or with BET) */
-  .recent .rv.b{color:rgb(var(--bet));background:rgba(var(--bet),.12)}   /* only BET held it */
-  .recent .rv.now{box-shadow:inset 0 0 0 1px rgba(var(--eng),.6)}
+  /* history row: last 8 rounds, newest first (left). Always visible — also with the pad hidden or the HUD folded. */
+  .recent{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-top:5px}
+  .recent .rv{text-align:center;font-size:12px;font-weight:700;padding:2px 0 1px;border-radius:5px;line-height:1.1;
+    color:var(--faint);background:rgba(255,255,255,.04)}
+  .recent .rv small{display:block;font-size:8px;font-weight:400;color:var(--faint);letter-spacing:.02em}
+  .recent .rv.h{color:var(--hit);background:rgba(61,220,151,.13)}   /* ENG held it (alone or with BET) */
+  .recent .rv.b{color:rgb(var(--bet));background:rgba(var(--bet),.13)}   /* only BET held it */
+  .recent .rv.now{box-shadow:inset 0 0 0 1px rgba(var(--eng),.65)}
   .recent .rv.now:not(.h):not(.b){color:var(--ink)}   /* the latest keeps its hit colour */
+  .recent:empty{display:none}
   .fold{background:none;border:0;color:var(--mut);font-size:13px;width:22px;height:22px;border-radius:6px}
   .fold:active{background:rgba(255,255,255,.08)}
 
   /* car race card (shown instead of the number HUD while Chamet Race is on screen) */
   .race{display:none}
   .racing .race{display:block}
-  .racing .row,.racing .sub,.racing .res,.racing .entry{display:none!important}
+  .racing .row,.racing .sub,.racing .res,.racing .entry,.racing .recent{display:none!important}
   .rHead{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--mut);margin-bottom:5px}
   .rHead b{color:var(--ink)} .rHead .cd{margin-left:auto;font-weight:700;color:rgb(var(--bet))}
   .rCars{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
@@ -161,9 +165,10 @@
     <div class="row eng"><span class="lab">Eng</span><div class="strip eng" id="eng"></div><span class="pct" id="engPct" title="the engine's own picks — scored every round, only bet once they beat the baseline"></span></div>
     <div class="row eng" id="aiRow" style="display:none"><span class="lab">AI</span><div class="strip ai"><span id="ai"></span></div><span class="pct" id="aiPct" title="how often the AI's 7 held the result (vs the central baseline on the same rounds)"></span></div>
     <div class="sub"><span class="new">New <b id="new"></b> <span id="newPct"></span></span></div>
-    <div class="res"><span class="status" id="status">Tap the result when it lands.</span><span class="rdH" id="rdH" style="display:none"></span><span class="recent" id="recent"></span>
+    <div class="res"><span class="status" id="status">Tap the result when it lands.</span><span class="rdH" id="rdH" style="display:none"></span>
       <button class="fold" id="padBtn" title="show / hide the number pad" style="display:none">⌨</button>
       <button class="fold" id="fold" title="collapse / expand">▾</button></div>
+    <div class="recent" id="recent"></div>
     <div class="entry">
       <div class="reelLine" id="reelLine" style="display:none"><span id="entryLab">reel digits</span><span class="reelPicks" id="reelPicks"></span></div>
       <div class="pad" id="pad"></div>
@@ -272,9 +277,10 @@ function render(){
     ? (L.oldHit?`<span class="hit">✓ ${L.actual}</span> in Bet`:`<span class="miss">✗ ${L.actual}</span> missed`)
       + ` · Eng ${L.engHit?'✓':'✗'}` + (L.aiHit==null?'':` · AI ${L.aiHit?'✓':'✗'}`)
     : (P.oR?'Tap the result when it lands.':'Tap the first result to start.');
-  const rec=P.rounds.slice(-5);
-  // green = ENG held it (alone or with BET) · gold = only BET held it · plain = full miss
-  $('recent').innerHTML=rec.map((e,i)=>`<span class="rv${e.eh?' h':e.oh?' b':''}${i===rec.length-1?' now':''}" title="${e.eh?(e.oh?'ENG + BET hit':'ENG hit'):e.oh?'BET hit only':'miss'}">${Number(e.s)|0}</span>`).join('');
+  // newest first · green = ENG held it (alone or with BET) · gold = only BET held it · plain = full miss
+  const rec=P.rounds.slice(-8).reverse();
+  $('recent').innerHTML=rec.map((e,i)=>{ const r=Array.isArray(e.r)&&e.r.length===3?e.r.map(d=>Number(d)|0):null;
+    return `<span class="rv${e.eh?' h':e.oh?' b':''}${i===0?' now':''}" title="${e.eh?(e.oh?'ENG + BET hit':'ENG hit'):e.oh?'BET hit only':'miss'}${r?' · '+r.join('+'):''}">${Number(e.s)|0}${r?`<small>${r.join('')}</small>`:''}</span>`; }).join('');
 }
 let reelPick=[];
 function buildPad(){
