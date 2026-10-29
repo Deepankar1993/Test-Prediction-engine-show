@@ -546,7 +546,7 @@ function rcRender(){ if(!RC) return; const f=rcPending, st=RC.stats(rcS);
   if(f) $('rCars').querySelectorAll('.nm').forEach((el,i)=>{ el.textContent=f.cars[i]; });
   const pc=x=>st.n?Math.round(100*x/st.n)+'%':'—';
   $('rStat').innerHTML = st.n
-    ? `Engine <b>${pc(st.eng)}</b> (${st.eng}/${st.n}, CI ${Math.round(st.ci[0]*100)}–${Math.round(st.ci[1]*100)}%) · favourite ${pc(st.fav)} · crowd ${pc(st.crowd)} · random 33%`
+    ? `Engine <b>${pc(st.eng)}</b> (${st.eng}/${st.n}, CI ${Math.round(st.ci[0]*100)}–${Math.round(st.ci[1]*100)}%) · favourite ${pc(st.fav)} · crowd ${pc(st.crowd)} · least-money ${pc(st.contra)} · random 33%`
       + (st.roi!=null?` · flat-bet ROI <b style="color:${st.roi>0?'var(--hit)':'var(--miss)'}">${st.roi>0?'+':''}${Math.round(st.roi*100)}%</b>`:'')
       + (st.ready?'':` <span style="color:var(--faint)">· collecting ${st.n}/${RC.MIN_N} — % and EV are the model's guess, unproven</span>`)
     : `Logging races… % and EV are the model's guess, unproven until ${RC.MIN_N} races are scored.`;

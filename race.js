@@ -69,6 +69,11 @@ window.SYLOX_RACE = (function () {
   function crowdOf(cars, odds) { let best = null, bo = Infinity;   // lowest live odds = most money on it
     cars.forEach((n, i) => { const o = odds[i] && odds[i].live; if (o != null && o < bo) { bo = o; best = n; } });
     return best; }
+  // the house-rigging test: if the game quietly lets the car with the LEAST money win, this baseline
+  // will beat everything else in the log (highest live odds = least money on it)
+  function contraOf(cars, odds) { let best = null, bo = -Infinity;
+    cars.forEach((n, i) => { const o = odds[i] && odds[i].live; if (o != null && o > bo) { bo = o; best = n; } });
+    return best; }
 
   // ---- learning (forward only: params fitted on past races, used for the next ones) -----------------
   // road prior: how often each road type has been the revealed one (Laplace +2 so nothing is 0)
@@ -96,7 +101,7 @@ window.SYLOX_RACE = (function () {
     // flat 1-unit bet on the engine's pick at the last live odds seen before the race
     let ret = 0, bets = 0; for (const r of R) { const o = r.pickOdds; if (o) { bets++; if (r.pick === r.winner) ret += o; } }
     const e = h('pick');
-    return { n, eng: e, fav: h('fav'), crowd: h('crowd'), ci: wilson(e, n), roi: bets ? (ret - bets) / bets : null, bets,
+    return { n, eng: e, fav: h('fav'), crowd: h('crowd'), contra: h('contra'), ci: wilson(e, n), roi: bets ? (ret - bets) / bets : null, bets,
       ready: n >= MIN_N }; }
 
   // A betting-phase reading: predict now (it's re-done as odds move; the last one before the race counts).
@@ -110,7 +115,7 @@ window.SYLOX_RACE = (function () {
     const ev = cars.map((n, i) => odds[i].live ? p[i] * odds[i].live - 1 : null);
     return { t: Date.now(), cars, road: st.road, ri: st.roadIdx, odds: odds.map(o => o.live), fixed: odds.map(o => o.fixed),
       p: p.map(x => Math.round(x * 1000) / 1000), pick, pickOdds: odds[cars.indexOf(pick)].live, fav: favOf(cars),
-      crowd: crowdOf(cars, odds), ev, cd: st.t };
+      crowd: crowdOf(cars, odds), contra: contraOf(cars, odds), ev, cd: st.t };
   }
   // The result banner: score the last forecast for that same lineup, log it, refit for next time.
   function settle(s, pending, winner) {
